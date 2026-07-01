@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model RegUser {
+  id          Int          @id @default(autoincrement())
+  employeeId  String?      @unique // Unique Employee identifier (e.g. EMP001)
+  name        String
+  password    String
+  role        Role
+  createdAt   DateTime     @default(now())
+  screenshots Screenshot[]
+  shifts      Shift[]
+
+  @@map("reg_users")
+}
+
+model Screenshot {
+  id            String   @id @default(uuid())
+  userId        Int
+  user          RegUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageUrl      String   // Path to captured screen image file
+  activeWindow  String   // Title of the active application (e.g. VS Code)
+  capturedAt    DateTime @default(now())
+  status        String   @default("Uploaded") // Telemetry sync status
+}
+
+model Shift {
+  id                 String         @id @default(uuid())
+  employeeId         String         // Reference to employee identifier
+  user               RegUser        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             Int            // Required relation link
+  shiftStartTime     DateTime       @default(now())
+  shiftEndTime       DateTime?
+  shiftStartLocation String         @default("CUSTOMER") // CUSTOMER, OFFICE
+  status             String         @default("Active") // Active, Completed
+  breaks             Break[]
+  tasks              Task[]
+  telemetry          TelemetryLog[]
+  pdfReportName       String?
+  pdfReportSize       String?
+  pdfReportUploadedAt DateTime?
+  latitude           Float?
+  longitude          Float?
+  startAddress       String?
+  locationFetchedAt  DateTime?
+  endLatitude        Float?
+  endLongitude       Float?
+  endAddress         String?
+  endLocationFetchedAt DateTime?
+}
+
+model Break {
+  id        String    @id @default(uuid())
+  shiftId   String
+  shift     Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  name      String    // e.g. Short Break 1, Lunch Break
+  startTime DateTime  @default(now())
+  endTime   DateTime?
+  status    String    @default("Used")
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  shiftId     String
+  shift       Shift     @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  text        String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model TelemetryLog {
+  id        String   @id @default(uuid())
+  shiftId   String
+  shift     Shift    @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  x         Int      // Mouse X coordinate
+  y         Int      // Mouse Y coordinate
+  isMoving  Boolean  // Active state
+  timestamp DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  EMPLOYEE
+}

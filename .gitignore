@@ -1,0 +1,31 @@
+# Dependency folders (Bulky libraries)
+wfh-frontend/node_modules/
+wfh_backend/node_modules/
+
+# Local Environment Credentials (Contains private keys and DB passwords)
+wfh-frontend/.env
+wfh-frontend/.env.local
+wfh-frontend/.env.development.local
+wfh-frontend/.env.test.local
+wfh-frontend/.env.production.local
+wfh_backend/.env
+
+# Backend uploaded telemetry screenshots & daily compliance PDF reports
+wfh_backend/public/uploads/
+
+# Build and distribution files
+wfh-frontend/dist/
+wfh-frontend/build/
+wfh-frontend/.next/
+wfh_backend/dist/
+wfh_backend/build/
+
+# System / IDE caches
+.DS_Store
+.idea/
+.vscode/
+*.tsbuildinfo
+
+# Exclude README files (to create directly on Git)
+README.md
+wfh-frontend/README.md
