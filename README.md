@@ -22,6 +22,7 @@ A modern, full-stack enterprise platform designed for organizations managing rem
 ![Express.js](https://img.shields.io/badge/Express.js-Backend-000000?style=flat-square&logo=express&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-7-2D3748?style=flat-square&logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/License-Proprietary%20%7C%20All%20Rights%20Reserved-FF4F00?style=flat-square)
 
 <br />
 
@@ -270,6 +271,19 @@ WorkTrack Pro is configured for zero-downtime, serverless cloud deployment:
 * **Stateless Authorization:** Secure JWT tokens verified on all protected API routes.
 * **Path Traversal Protection:** File download endpoints validate filenames and prevent directory traversal (`path.basename`).
 * **Role-Based Guards:** Enforces strict role checks (`ADMIN` vs `EMPLOYEE`) at both client and database level.
+
+---
+
+## 📄 License & Intellectual Property Protection
+
+Copyright © 2026 **Riya Kumari**. All Rights Reserved.
+
+This repository is maintained for **portfolio demonstration and candidate evaluation purposes**.
+
+* **For Hiring Teams & Technical Reviewers:** You are granted full permission to view, review, inspect, and evaluate this codebase for employment, contracting, or assessment purposes.
+* **Prohibition on Unauthorized Use:** Reproduction, commercial redistribution, sublicensing, mirroring, or derivative commercial exploitation of this project, in whole or in part, is strictly prohibited without prior express written consent from the author.
+
+See the full [LICENSE](LICENSE) file for legal details.
 
 ---
 
