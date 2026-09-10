@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { getSocket } from "@/utils/socket";
 import { 
     FiBell, 
     FiLogOut, 
@@ -23,14 +24,18 @@ import {
     FiTv,
     FiMaximize2,
     FiRefreshCw,
-    FiRadio
+    FiRadio,
+    FiMenu
 } from "react-icons/fi";
 import { API_BASE_URL } from "../config";
+import { LiveScreenModal } from "@/components/LiveScreenModal";
+import { mapName } from "@/utils/nameMapper";
 
 interface EmployeeAuditData {
     employeeId: string;
     name: string;
     avatar: string;
+
     role: string;
     isWfhActive: boolean;
     wfhDaysCount: number;
@@ -80,6 +85,7 @@ interface EmployeeAuditData {
  
 const AdminDashboard = () => {
     const navigate = useNavigate();
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     
     const adminName = sessionStorage.getItem("wfh_user_name") || "Admin Portal";
     const adminRole = sessionStorage.getItem("wfh_user_role") || "Admin";
@@ -505,7 +511,8 @@ const AdminDashboard = () => {
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-peacock/4 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
  
             {/* Sidebar (Matching EmployeeSidebar Theme exactly) */}
-            <div className="w-64 min-h-screen bg-white border-r border-slate-100 p-6 flex flex-col justify-between flex-shrink-0 z-20">
+            <div className={"w-64 min-h-screen bg-white border-r border-slate-100 p-6 flex flex-col justify-between flex-shrink-0 z-20 " + (mobileSidebarOpen ? "fixed inset-0 z-30 bg-white" : "hidden md:block")}
+                >
                 <div>
                     {/* Logo Section */}
                     <div className="flex items-center gap-3 mb-10 px-2">
@@ -514,6 +521,11 @@ const AdminDashboard = () => {
                             alt="Company Logo" 
                             className="h-9 w-auto object-contain animate-fade-in"
                         />
+                        {mobileSidebarOpen && (
+                            <button className="ml-auto p-2" onClick={() => setMobileSidebarOpen(false)}>
+                                <FiX size={20} />
+                            </button>
+                        )}
                     </div>
  
                     {/* Sidebar menu navigation */}
@@ -526,6 +538,7 @@ const AdminDashboard = () => {
                                     onClick={() => {
                                         setActiveMenu(item.name);
                                         setSearchQuery(""); // Clear searches on switch
+                                        setMobileSidebarOpen(false);
                                     }}
                                     className={`flex items-center gap-3.5 px-4 py-3.5 rounded-2xl font-semibold text-sm transition-all duration-300 w-full text-left outline-none ${
                                         isActive
@@ -578,6 +591,10 @@ const AdminDashboard = () => {
                     </div>
  
                     <div className="flex items-center gap-6">
+                        {/* Mobile sidebar toggle */}
+                        <button className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 hover:bg-slate-100" onClick={() => setMobileSidebarOpen(true)} title="Menu">
+                            <FiMenu size={20} />
+                        </button>
                         <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
                             <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl shadow-sm">
                                 <FiCalendar className="text-brand-blue" size={16} />
@@ -666,17 +683,15 @@ const AdminDashboard = () => {
                                             .sort((a, b) => parseTime(a.shiftStartTime || "") - parseTime(b.shiftStartTime || ""))
                                             .map((emp) => {
                                                 return (
-                                                    <div 
-                                                        key={emp.employeeId}
-                                                        className="bg-white rounded-2xl border px-5 py-4 shadow-sm border-brand-blue ring-2 ring-brand-blue/5 shadow-brand-blue/5 shadow-md flex items-center justify-between gap-4"
-                                                    >
+                                                    <div key={emp.employeeId} className="bg-white rounded-2xl border px-5 py-4 shadow-sm border-brand-blue ring-2 ring-brand-blue/5 shadow-brand-blue/5 shadow-md flex items-center justify-between gap-4">
                                                         <div className="flex items-center gap-3 min-w-0">
                                                             <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)] shrink-0" />
                                                             <div className="min-w-0">
-                                                                <h4 className="text-sm font-bold text-slate-800 leading-tight truncate">{emp.name}</h4>
+                                                                <h4 className="text-sm font-bold text-slate-800 leading-tight truncate">{mapName(emp.name)}</h4>
                                                                 <p className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5 uppercase">{emp.employeeId}</p>
                                                             </div>
                                                         </div>
+                                                        <button onClick={() => setSelectedLiveScreenEmp(emp)} className="ml-2 py-1 px-3 rounded-md text-xs bg-brand-blue text-white hover:bg-brand-peacock">Live Watch</button>
                                                     </div>
                                                 );
                                             })}
@@ -745,7 +760,7 @@ const AdminDashboard = () => {
                                                         )}
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <h4 className="text-xs font-bold text-slate-800 leading-tight truncate">{emp.name}</h4>
+                                                        <h4 className="text-xs font-bold text-slate-800 leading-tight truncate">{mapName(emp.name)}</h4>
                                                         <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{emp.employeeId} • {emp.role.replace(/\s*\(.*?\)\s*/g, "")}</p>
                                                     </div>
                                                 </div>
@@ -858,7 +873,7 @@ const AdminDashboard = () => {
                                                                         {emp.avatar}
                                                                     </div>
                                                                     <div className="min-w-0">
-                                                                        <h4 className="text-xs font-bold text-slate-600 leading-tight truncate">{emp.name}</h4>
+                                                                        <h4 className="text-xs font-bold text-slate-600 leading-tight truncate">{mapName(emp.name)}</h4>
                                                                         <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{emp.employeeId} • {emp.role.replace(/\s*\(.*?\)\s*/g, "")}</p>
                                                                     </div>
                                                                 </div>
@@ -979,7 +994,7 @@ const AdminDashboard = () => {
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <h5 className="text-xs font-bold text-slate-800 leading-tight flex items-center gap-1.5">
-                                                                    {emp.name}
+                                                                    {mapName(emp.name)}
                                                                     {isActive && (
                                                                         <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Working from Home" />
                                                                     )}
@@ -1380,7 +1395,7 @@ const AdminDashboard = () => {
                                                                 {emp.avatar}
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <h4 className="text-xs font-bold text-slate-800 truncate leading-tight">{emp.name}</h4>
+                                                                <h4 className="text-xs font-bold text-slate-800 truncate leading-tight">{mapName(emp.name)}</h4>
                                                                 <span className="text-[10px] font-bold text-emerald-600">{emp.employeeId}</span>
                                                             </div>
                                                         </div>
@@ -1396,7 +1411,7 @@ const AdminDashboard = () => {
                                                         {hasScreenshot ? (
                                                             <img 
                                                                 src={emp.latestScreenshot!.imageUrl} 
-                                                                alt={`${emp.name} Live Screen`} 
+                                                                alt={`${mapName(emp.name)} Live Screen`} 
                                                                 className="w-full h-full object-cover"
                                                             />
                                                         ) : (
@@ -1475,7 +1490,7 @@ const AdminDashboard = () => {
                                                                 {emp.avatar}
                                                             </div>
                                                             <div>
-                                                                <h4 className="text-sm font-bold text-slate-800 leading-tight">{emp.name}</h4>
+                                                                <h4 className="text-sm font-bold text-slate-800 leading-tight">{mapName(emp.name)}</h4>
                                                                 <p className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider">{emp.employeeId} • WFH Active</p>
                                                             </div>
                                                         </div>
@@ -1584,7 +1599,7 @@ const AdminDashboard = () => {
                                         <div key={emp.employeeId} className="border border-slate-100 rounded-2xl p-5 space-y-3">
                                             <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-slate-800">{emp.name}</span>
+                                                    <span className="text-xs font-bold text-slate-800">{mapName(emp.name)}</span>
                                                     <span className="text-[10px] text-slate-400">({emp.employeeId})</span>
                                                 </div>
                                                 <span className={`text-[9px] font-black uppercase tracking-wider ${emp.pdfReport ? "text-green-500" : "text-amber-500"}`}>
@@ -2171,6 +2186,13 @@ const AdminDashboard = () => {
                                 className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer"
                             >
                                 <FiX size={18} />
+                                {/* Live Screen Fullscreen Stream Viewer */}
+                                {selectedLiveScreenEmp && (
+                                    <LiveScreenModal
+                                        employeeId={selectedLiveScreenEmp.employeeId}
+                                        onClose={() => setSelectedLiveScreenEmp(null)}
+                                    />
+                                )}
                             </button>
                         </div>
 

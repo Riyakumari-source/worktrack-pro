@@ -1,0 +1,57 @@
+/* src/styles/responsive.css */
+/* Breakpoints */
+@media (max-width: 1024px) {
+  /* Reduce sidebar width on tablets */
+  .sidebar {
+    width: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Mobile view */
+  .sidebar {
+    position: fixed;
+    inset: 0;
+    height: 100vh;
+    width: 260px;
+    background: #111827; /* dark bg to match existing */
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+    z-index: 50;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay {
+    display: none;
+  }
+  .sidebar.open + .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 40;
+  }
+  /* Adjust main content padding */
+  .main-content {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Touch friendly button sizes */
+  button,
+  .icon-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .navbar .logo img {
+    height: 2rem;
+  }
+}
+
+/* Table overflow on small screens */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

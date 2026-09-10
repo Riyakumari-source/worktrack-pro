@@ -1,10 +1,14 @@
 import fs from "fs";
 import path from "path";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
 import app from "./app";
 import prisma from "./lib/prisma";
 import { appConfig } from "./config/app.config";
+import { initLiveSocket } from "./socket/liveStream.socket";
 
 const PORT = process.env.PORT || 5000;
+// Create HTTP server for Express & Socket.io
 
 // Automated Storage optimization routine (purges screenshots older than 7 days)
 const runDailyScreenshotCleanup = async () => {
@@ -76,7 +80,20 @@ const startServer = async () => {
     console.warn("=============================================================");
   }
 
-  app.listen(PORT, () => {
+  const httpServer = http.createServer(app);
+  // Initialize Socket.io with same CORS config as Express
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: appConfig.corsOrigin,
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    },
+  });
+
+  // Register live stream socket handlers
+  initLiveSocket(io);
+
+  httpServer.listen(PORT, () => {
     console.log(`=============================================================`);
     console.log(` WFH Management System Backend is running on port ${PORT} `);
     console.log(` API Endpoint: http://localhost:${PORT} `);

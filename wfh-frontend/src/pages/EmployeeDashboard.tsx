@@ -24,6 +24,7 @@ import {
     FiMapPin
 } from "react-icons/fi";
 import EmployeeSidebar from "@/components/EmployeeSidebar";
+import { getSocket } from "@/utils/socket";
 import {
     API_BASE_URL,
     DEFAULT_PUBLIC_CONFIG,
@@ -356,18 +357,92 @@ const EmployeeDashboard = () => {
         }
     };
 
-    // Live Screen Frame Sync (every 15s during active shift)
+    // Live Screen Frame Sync (≈1 FPS live streaming during active shift)
     useEffect(() => {
         if (!isClockedIn || currentStatus !== "Active") return;
-
-        const initialTimer = setTimeout(() => {
-            captureAndUploadLiveScreenshot();
-        }, 1500);
-
-        const interval = setInterval(() => {
-            captureAndUploadLiveScreenshot();
-        }, 15000);
-
+        const socket = getSocket();
+        const captureAndEmitLiveFrame = async () => {
+            if (isUploadingScreenshotRef.current) return;
+            try {
+                if (!screenStreamRef.current || !screenStreamRef.current.active) return;
+                const track = screenStreamRef.current.getVideoTracks()[0];
+                if (!track || track.readyState !== "live") return;
+                isUploadingScreenshotRef.current = true;
+                let blob: Blob | null = null;
+                // Use existing capture logic (ImageCapture or fallback)
+                if ("ImageCapture" in window) {
+                    try {
+                        const imageCapture = new (window as any).ImageCapture(track);
+                        const bitmap = await imageCapture.grabFrame();
+                        const canvas = document.createElement("canvas");
+                        canvas.width = bitmap.width;
+                        canvas.height = bitmap.height;
+                        const ctx = canvas.getContext("2d");
+                        if (ctx) {
+                            ctx.drawImage(bitmap, 0, 0);
+                            blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png", 0.85));
+                        }
+                    } catch (icErr) {
+                        console.warn("ImageCapture fallback to video canvas:", icErr);
+                    }
+                }
+                if (!blob) {
+                    blob = await new Promise<Blob | null>((resolve) => {
+                        const video = document.createElement("video");
+                        video.muted = true;
+                        video.playsInline = true;
+                        video.autoplay = true;
+                        video.srcObject = screenStreamRef.current;
+                        let done = false;
+                        const finish = (result: Blob | null) => {
+                            if (done) return;
+                            done = true;
+                            video.pause();
+                            video.srcObject = null;
+                            resolve(result);
+                        };
+                        const draw = () => {
+                            try {
+                                const canvas = document.createElement("canvas");
+                                canvas.width = video.videoWidth || 1280;
+                                canvas.height = video.videoHeight || 720;
+                                const ctx = canvas.getContext("2d");
+                                if (ctx) {
+                                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                    canvas.toBlob((b) => finish(b), "image/png", 0.85);
+                                    return;
+                                }
+                            } catch (err) { }
+                            finish(null);
+                        };
+                        const safetyTimer = setTimeout(draw, 1200);
+                        video.onloadeddata = () => {
+                            video.play().then(() => setTimeout(draw, 100)).catch(draw);
+                        };
+                        video.play().catch(() => { });
+                    });
+                }
+                if (!blob) return;
+                const dataUrl = await new Promise<string>((res) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => res(reader.result as string);
+                    reader.readAsDataURL(blob as Blob);
+                });
+                // Emit via socket.io
+                socket.emit("live:frame", {
+                    frame: dataUrl,
+                    cursor: { x: 0, y: 0 }, // TODO: replace with actual cursor tracking if needed
+                    activeWindow: document.title || "Desktop Screen (Live Monitoring)"
+                });
+            } catch (err) {
+                console.error("Failed to capture and emit live frame:", err);
+            } finally {
+                isUploadingScreenshotRef.current = false;
+            }
+        };
+        // Initial short delay then start 1 FPS interval
+        const initialTimer = setTimeout(captureAndEmitLiveFrame, 1500);
+        const interval = setInterval(captureAndEmitLiveFrame, 1000);
         return () => {
             clearTimeout(initialTimer);
             clearInterval(interval);

@@ -1,0 +1,46 @@
+/* Responsive styling for LiveScreenModal */
+.live-screen-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.live-screen-modal-content {
+  background: #fff;
+  border-radius: 0.75rem;
+  width: 90vw;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.live-screen-modal-header {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+  text-align: left;
+}
+
+.live-screen-modal-body {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.frame-container img {
+  width: 100%;
+  height: auto;
+}
+
+@media (max-width: 640px) {
+  .live-screen-modal-content {
+    width: 95vw;
+    max-height: 85vh;
+  }
+}
