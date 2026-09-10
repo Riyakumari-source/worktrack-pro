@@ -35,13 +35,10 @@ export const clockIn = async (req: AuthenticatedRequest, res: Response): Promise
   }
 
   try {
-    const today = new Date();
-    const startOfToday = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0, 0)
-    );
-    const endOfToday = new Date(
-      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999)
-    );
+    const IST_OFFSET_MS = 19800000; // 5 hours 30 mins
+    const istNow = new Date(Date.now() + IST_OFFSET_MS);
+    const startOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0) - IST_OFFSET_MS);
+    const endOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999) - IST_OFFSET_MS);
 
     const completedShiftToday = await prisma.shift.findFirst({
       where: {
@@ -67,8 +64,8 @@ export const clockIn = async (req: AuthenticatedRequest, res: Response): Promise
     });
 
     if (activeShift) {
-      const todayStr = new Date().toISOString().split("T")[0];
-      const activeShiftDateStr = new Date(activeShift.shiftStartTime).toISOString().split("T")[0];
+      const todayStr = new Date(Date.now() + IST_OFFSET_MS).toISOString().split("T")[0];
+      const activeShiftDateStr = new Date(new Date(activeShift.shiftStartTime).getTime() + IST_OFFSET_MS).toISOString().split("T")[0];
 
       if (activeShiftDateStr !== todayStr) {
         await prisma.shift.update({
@@ -205,9 +202,10 @@ export const getActiveShift = async (req: AuthenticatedRequest, res: Response): 
       },
     });
 
+    const IST_OFFSET_MS = 19800000; // 5 hours 30 mins
     if (activeShift) {
-      const todayStr = new Date().toISOString().split("T")[0];
-      const activeShiftDateStr = new Date(activeShift.shiftStartTime).toISOString().split("T")[0];
+      const todayStr = new Date(Date.now() + IST_OFFSET_MS).toISOString().split("T")[0];
+      const activeShiftDateStr = new Date(new Date(activeShift.shiftStartTime).getTime() + IST_OFFSET_MS).toISOString().split("T")[0];
 
       if (activeShiftDateStr !== todayStr) {
         await prisma.shift.update({
@@ -226,13 +224,9 @@ export const getActiveShift = async (req: AuthenticatedRequest, res: Response): 
     }
 
     if (!activeShift) {
-      const today = new Date();
-      const startOfToday = new Date(
-        Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 0, 0, 0, 0)
-      );
-      const endOfToday = new Date(
-        Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate(), 23, 59, 59, 999)
-      );
+      const istNow = new Date(Date.now() + IST_OFFSET_MS);
+      const startOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0) - IST_OFFSET_MS);
+      const endOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999) - IST_OFFSET_MS);
 
       const completedShiftToday = await prisma.shift.findFirst({
         where: {

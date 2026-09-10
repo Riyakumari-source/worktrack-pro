@@ -122,13 +122,16 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
         continue;
       }
 
+const TIMEZONE = "Asia/Kolkata";
+const IST_OFFSET_MS = 19800000; // 5 hours 30 mins in milliseconds
+
       let shift = emp.shifts[0];
 
       // Timezone neutrality: automatic clock-out if shift was on a past day
       const isWfhActive = shift.status === "Active";
       if (isWfhActive) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        const activeShiftDateStr = new Date(shift.shiftStartTime).toISOString().split('T')[0];
+        const todayStr = new Date(Date.now() + IST_OFFSET_MS).toISOString().split('T')[0];
+        const activeShiftDateStr = new Date(new Date(shift.shiftStartTime).getTime() + IST_OFFSET_MS).toISOString().split('T')[0];
 
         if (activeShiftDateStr !== todayStr) {
           // Automatically mark the past active shift as Absent in the database
@@ -160,19 +163,24 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
       const shiftStartTimeStr = new Date(shift.shiftStartTime).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        hour12: true
+        second: "2-digit",
+        hour12: true,
+        timeZone: TIMEZONE
       });
 
       const shiftEndTimeStr = shift.shiftEndTime ? new Date(shift.shiftEndTime).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        hour12: true
+        second: "2-digit",
+        hour12: true,
+        timeZone: TIMEZONE
       }) : undefined;
 
       const shiftDateStr = new Date(shift.shiftStartTime).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-        year: "numeric"
+        year: "numeric",
+        timeZone: TIMEZONE
       });
 
       // Determine status
@@ -214,7 +222,7 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
         totalDuration: formatBreakDuration(breakDurationMs),
         history: shift.breaks.map((b: any) => ({
           name: b.name,
-          time: new Date(b.startTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+          time: new Date(b.startTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: TIMEZONE }),
           status: b.endTime ? "Used" : "Active"
         }))
       };
@@ -223,8 +231,8 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
       const tasks = shift.tasks.map((t: any) => ({
         text: t.text,
         completed: t.completed,
-        completedAt: t.completedAt ? `Completed at ${new Date(t.completedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}` : undefined,
-        createdAt: t.createdAt ? new Date(t.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true }) : undefined
+        completedAt: t.completedAt ? `Completed at ${new Date(t.completedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: TIMEZONE })}` : undefined,
+        createdAt: t.createdAt ? new Date(t.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: TIMEZONE }) : undefined
       }));
 
       // Gather PDF reports
@@ -234,26 +242,27 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
           name: shift.pdfReportName,
           size: shift.pdfReportSize || "0.00 MB",
           uploadedAt: shift.pdfReportUploadedAt
-            ? `Uploaded at ${new Date(shift.pdfReportUploadedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}`
+            ? `Uploaded at ${new Date(shift.pdfReportUploadedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: TIMEZONE })}`
             : "Uploaded today"
         };
       }
 
-      // Compile chronological activity logs feed
+      // Compile chronological activity logs feed in IST
+      const formatTimeIST = (d: Date | string) => new Date(d).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: TIMEZONE });
       const activityLogs: string[] = [];
       if (latestLog && isStillActive) {
-        activityLogs.push(`[${new Date(latestLog.timestamp).toLocaleTimeString()}] Telemetry heartbeat: Cursor is ${cursorStatus.toUpperCase()} at X:${latestLog.x}px, Y:${latestLog.y}px`);
+        activityLogs.push(`[${formatTimeIST(latestLog.timestamp)}] Telemetry heartbeat: Cursor is ${cursorStatus.toUpperCase()} at X:${latestLog.x}px, Y:${latestLog.y}px`);
       }
       shift.breaks.forEach((b: any) => {
-        activityLogs.push(`[${new Date(b.startTime).toLocaleTimeString()}] Break session '${b.name}' initiated`);
+        activityLogs.push(`[${formatTimeIST(b.startTime)}] Break session '${b.name}' initiated`);
         if (b.endTime) {
-          activityLogs.push(`[${new Date(b.endTime).toLocaleTimeString()}] Break session '${b.name}' ended`);
+          activityLogs.push(`[${formatTimeIST(b.endTime)}] Break session '${b.name}' ended`);
         }
       });
       shift.tasks.forEach((t: any) => {
-        const timeLabel = t.createdAt ? new Date(t.createdAt).toLocaleTimeString() : "Recent";
+        const timeLabel = t.createdAt ? formatTimeIST(t.createdAt) : "Recent";
         if (t.completed) {
-          activityLogs.push(`[${t.completedAt ? new Date(t.completedAt).toLocaleTimeString() : "Recent"}] Compliance Task completed: "${t.text}"`);
+          activityLogs.push(`[${t.completedAt ? formatTimeIST(t.completedAt) : "Recent"}] Compliance Task completed: "${t.text}"`);
         } else {
           activityLogs.push(`[${timeLabel}] Task registered: "${t.text}"`);
         }
@@ -268,7 +277,9 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
         currentStatus,
         cursorStatus,
         shiftStartTime: `${shiftStartTimeStr} (${shiftDateStr})`,
+        shiftStartTimeRaw: new Date(shift.shiftStartTime).toISOString(),
         shiftEndTime: shiftEndTimeStr ? `${shiftEndTimeStr} (${shiftDateStr})` : undefined,
+        shiftEndTimeRaw: shift.shiftEndTime ? new Date(shift.shiftEndTime).toISOString() : undefined,
         shiftStatus: shift.status, // Database attendance status
         shiftDateRaw: new Date(shift.shiftStartTime).toISOString().split('T')[0], // YYYY-MM-DD for grouping
         shiftDateLabel: shiftDateStr, // "Sep 8, 2026" for display
@@ -378,13 +389,16 @@ export const getDailyPdfReports = async (req: AuthenticatedRequest, res: Respons
           weekday: "long",
           year: "numeric",
           month: "long",
-          day: "numeric"
+          day: "numeric",
+          timeZone: TIMEZONE
         }),
         uploadedAt: shift.pdfReportUploadedAt
           ? new Date(shift.pdfReportUploadedAt).toLocaleTimeString("en-US", {
               hour: "2-digit",
               minute: "2-digit",
-              hour12: true
+              second: "2-digit",
+              hour12: true,
+              timeZone: TIMEZONE
             })
           : "N/A",
         pdfReportUploadedAt: shift.pdfReportUploadedAt,
@@ -448,17 +462,22 @@ export const getAllShifts = async (req: AuthenticatedRequest, res: Response): Pr
       const shiftStartTimeStr = new Date(s.shiftStartTime).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        hour12: true
+        second: "2-digit",
+        hour12: true,
+        timeZone: TIMEZONE
       });
       const shiftEndTimeStr = s.shiftEndTime ? new Date(s.shiftEndTime).toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
-        hour12: true
+        second: "2-digit",
+        hour12: true,
+        timeZone: TIMEZONE
       }) : undefined;
       const shiftDateStr = new Date(s.shiftStartTime).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
-        year: "numeric"
+        year: "numeric",
+        timeZone: TIMEZONE
       });
 
       return {
@@ -467,7 +486,9 @@ export const getAllShifts = async (req: AuthenticatedRequest, res: Response): Pr
         name: s.user?.name || "Unknown",
         role: s.user?.role || "EMPLOYEE",
         shiftStartTime: `${shiftStartTimeStr} (${shiftDateStr})`,
+        shiftStartTimeRaw: new Date(s.shiftStartTime).toISOString(),
         shiftEndTime: shiftEndTimeStr ? `${shiftEndTimeStr} (${shiftDateStr})` : undefined,
+        shiftEndTimeRaw: s.shiftEndTime ? new Date(s.shiftEndTime).toISOString() : undefined,
         shiftDate: shiftDateStr,
         status: s.status,
         latitude: s.latitude,

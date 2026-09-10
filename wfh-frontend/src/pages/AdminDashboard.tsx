@@ -37,7 +37,9 @@ interface EmployeeAuditData {
     currentStatus: "Active" | "On Break" | "Offline" | "Idle";
     cursorStatus: "Moving" | "Stopped" | "Offline";
     shiftStartTime?: string;
+    shiftStartTimeRaw?: string;
     shiftEndTime?: string;
+    shiftEndTimeRaw?: string;
     shiftStatus?: string;
     shiftDateRaw?: string;      // YYYY-MM-DD for date grouping
     shiftDateLabel?: string;    // e.g. "Sep 8, 2026" for display
@@ -394,6 +396,43 @@ const AdminDashboard = () => {
         fetchScreenshots();
     }, [detailsModalEmp]);
 
+    // Helper to format exact shift time in user/Indian local format with seconds
+    const formatShiftTime = (rawTime?: string, formattedFallback?: string) => {
+        if (rawTime) {
+            try {
+                const d = new Date(rawTime);
+                if (!isNaN(d.getTime())) {
+                    return d.toLocaleTimeString("en-US", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: true
+                    });
+                }
+            } catch (_) {}
+        }
+        if (formattedFallback) {
+            return formattedFallback.replace(/\s*\(.*?\)\s*/, "");
+        }
+        return "--:--";
+    };
+
+    // Helper to calculate live ticking elapsed shift duration
+    const getElapsedShiftTime = (rawTime?: string) => {
+        if (!rawTime) return "";
+        try {
+            const start = new Date(rawTime).getTime();
+            if (isNaN(start)) return "";
+            const diffSecs = Math.max(0, Math.floor((Date.now() - start) / 1000));
+            const hrs = Math.floor(diffSecs / 3600);
+            const mins = Math.floor((diffSecs % 3600) / 60);
+            const secs = diffSecs % 60;
+            return `${String(hrs).padStart(2, '0')}h : ${String(mins).padStart(2, '0')}m : ${String(secs).padStart(2, '0')}s`;
+        } catch (_) {
+            return "";
+        }
+    };
+
     // Helper to parse AM/PM time into minutes for chronological sorting
     const parseTime = (tStr: string) => {
         if (!tStr) return 0;
@@ -410,7 +449,12 @@ const AdminDashboard = () => {
     useEffect(() => {
         const clockInterval = setInterval(() => {
             const now = new Date();
-            setCurrentTime(now.toLocaleTimeString("en-US", { hour12: true }));
+            setCurrentTime(now.toLocaleTimeString("en-US", { 
+                hour: "2-digit", 
+                minute: "2-digit", 
+                second: "2-digit", 
+                hour12: true 
+            }));
             setCurrentDate(now.toLocaleDateString("en-US", { 
                 weekday: "long", 
                 year: "numeric", 
@@ -726,10 +770,13 @@ const AdminDashboard = () => {
                                                 <div className="lg:w-1/5 shrink-0">
                                                     <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start</span>
                                                     <span className="font-extrabold text-slate-700 tabular-nums text-xs mt-0.5 block">
-                                                        {emp.shiftStartTime
-                                                            ? emp.shiftStartTime.replace(/\s*\(.*?\)\s*/, "")
-                                                            : "--:--"}
+                                                        {formatShiftTime(emp.shiftStartTimeRaw, emp.shiftStartTime)}
                                                     </span>
+                                                    {isActiveShift && emp.shiftStartTimeRaw && (
+                                                        <span className="text-[9px] font-bold text-emerald-600 tabular-nums block mt-0.5 animate-pulse">
+                                                            ⏱ {getElapsedShiftTime(emp.shiftStartTimeRaw)}
+                                                        </span>
+                                                    )}
                                                 </div>
 
                                                 {/* View Details */}
@@ -1004,13 +1051,22 @@ const AdminDashboard = () => {
                                         <div>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start Time</span>
                                             <span className="text-xs font-black text-slate-700 mt-1 block tabular-nums">
-                                                {currentEmployee.shiftStartTime ? (currentEmployee.shiftStartTime.includes(" ") ? `${currentEmployee.shiftStartTime.split(" ")[0]} ${currentEmployee.shiftStartTime.split(" ")[1]}` : currentEmployee.shiftStartTime) : "--:--"}
+                                                {formatShiftTime(currentEmployee.shiftStartTimeRaw, currentEmployee.shiftStartTime)}
                                             </span>
+                                            {currentEmployee.isWfhActive && currentEmployee.shiftStartTimeRaw && (
+                                                <span className="text-[9px] font-bold text-emerald-600 tabular-nums block mt-0.5 animate-pulse">
+                                                    ⏱ {getElapsedShiftTime(currentEmployee.shiftStartTimeRaw)}
+                                                </span>
+                                            )}
                                         </div>
                                         <div>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift End Time</span>
                                             <span className="text-xs font-black text-slate-700 mt-1 block tabular-nums">
-                                                {currentEmployee.shiftEndTime ? (currentEmployee.shiftEndTime.includes(" ") ? `${currentEmployee.shiftEndTime.split(" ")[0]} ${currentEmployee.shiftEndTime.split(" ")[1]}` : currentEmployee.shiftEndTime) : (currentEmployee.isWfhActive ? "Active Now" : "--:--")}
+                                                {currentEmployee.isWfhActive ? (
+                                                    <span className="text-emerald-600 font-bold text-[10px] animate-pulse">● Active Now</span>
+                                                ) : (
+                                                    formatShiftTime(currentEmployee.shiftEndTimeRaw, currentEmployee.shiftEndTime) || "--:--"
+                                                )}
                                             </span>
                                         </div>
                                     </div>
@@ -1370,7 +1426,7 @@ const AdminDashboard = () => {
                                                     <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400 font-semibold border-t border-slate-50">
                                                         <span className="flex items-center gap-1 text-slate-600">
                                                             <FiClock size={12} className="text-emerald-500" />
-                                                            {emp.shiftStartTime ? emp.shiftStartTime.split(" ")[0] : "Active"}
+                                                            {formatShiftTime(emp.shiftStartTimeRaw, emp.shiftStartTime)}
                                                         </span>
                                                         <span className="text-emerald-600 font-bold">
                                                             {emp.cursorStatus === "Moving" ? "⚡ Active Moving" : "Idle"}
@@ -1609,10 +1665,10 @@ const AdminDashboard = () => {
                                                             </div>
                                                         </td>
                                                         <td className="py-4.5 px-5 tabular-nums text-slate-500">{log.shiftDate}</td>
-                                                        <td className="py-4.5 px-5 text-slate-700">{log.shiftStartTime.split(" ")[0]} {log.shiftStartTime.split(" ")[1]}</td>
+                                                        <td className="py-4.5 px-5 text-slate-700 tabular-nums">{formatShiftTime((log as any).shiftStartTimeRaw, log.shiftStartTime)}</td>
                                                         <td className="py-4.5 px-5">
                                                             {log.shiftEndTime ? (
-                                                                <span className="text-slate-700">{log.shiftEndTime.split(" ")[0]} {log.shiftEndTime.split(" ")[1]}</span>
+                                                                <span className="text-slate-700 tabular-nums">{formatShiftTime((log as any).shiftEndTimeRaw, log.shiftEndTime)}</span>
                                                             ) : (
                                                                 <span className="text-green-500 font-bold uppercase text-[9px] px-2 py-0.5 rounded-md bg-green-50 border border-green-200">Active</span>
                                                             )}
@@ -1810,13 +1866,22 @@ const AdminDashboard = () => {
                             <div>
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start Time</span>
                                 <p className="text-xs font-black text-slate-700 mt-1 tabular-nums">
-                                    {detailsModalEmp.shiftStartTime || "--:--"}
+                                    {formatShiftTime(detailsModalEmp.shiftStartTimeRaw, detailsModalEmp.shiftStartTime)}
                                 </p>
+                                {detailsModalEmp.isWfhActive && detailsModalEmp.shiftStartTimeRaw && (
+                                    <p className="text-[9px] font-bold text-emerald-600 tabular-nums mt-0.5 animate-pulse">
+                                        ⏱ {getElapsedShiftTime(detailsModalEmp.shiftStartTimeRaw)}
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Shift End Time</span>
                                 <p className="text-xs font-black text-slate-700 mt-1 tabular-nums">
-                                    {detailsModalEmp.shiftEndTime || "--:--"}
+                                    {detailsModalEmp.isWfhActive ? (
+                                        <span className="text-emerald-600 font-bold text-[10px] animate-pulse">● Active Now</span>
+                                    ) : (
+                                        formatShiftTime(detailsModalEmp.shiftEndTimeRaw, detailsModalEmp.shiftEndTime) || "--:--"
+                                    )}
                                 </p>
                             </div>
                             <div>
