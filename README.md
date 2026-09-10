@@ -13,8 +13,12 @@ A **full-stack SaaS-style workforce monitoring system** built using
 ![Express.js](https://img.shields.io/badge/Express.js-Backend-black?logo=express)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql)
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma)
+[![Live Demo](https://img.shields.io/badge/🌐%20Live%20Demo-worktrack--pro--gilt.vercel.app-0070F3?style=for-the-badge)](https://worktrack-pro-gilt.vercel.app)
 
 </div>
+
+> **🌐 Live Application URL:** [https://worktrack-pro-gilt.vercel.app](https://worktrack-pro-gilt.vercel.app)  
+> **⚡ Live Backend API:** [https://worktrack-backend-knbp.onrender.com](https://worktrack-backend-knbp.onrender.com)
 
 ---
 
