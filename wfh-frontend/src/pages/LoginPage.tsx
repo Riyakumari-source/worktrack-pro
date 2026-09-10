@@ -65,10 +65,10 @@ const LoginPage = () => {
     };
 
     return (
-        <div className="min-h-screen relative flex flex-col items-center justify-center bg-[#F8F7FF] font-[Inter,sans-serif] p-6 overflow-hidden">
-            <div className="absolute -bottom-24 -left-24 w-[450px] h-[450px] bg-brand-peacock opacity-[0.08] rounded-full blur-[100px] -z-10 pointer-events-none"></div>
-            <div className="absolute top-1/3 -left-24 w-[400px] h-[400px] bg-violet-300 opacity-[0.06] rounded-full blur-[100px] -z-10 pointer-events-none"></div>
-            <div className="absolute -top-24 -right-24 w-[500px] h-[500px] bg-brand-blue opacity-[0.08] rounded-full blur-[110px] -z-10 pointer-events-none"></div>
+        <div className="min-h-screen relative flex flex-col items-center justify-center bg-[#F8FAFC] font-[Inter,sans-serif] p-6 overflow-hidden">
+            <div className="absolute -bottom-24 -left-24 w-[450px] h-[450px] bg-brand-peacock opacity-[0.10] rounded-full blur-[100px] -z-10 pointer-events-none"></div>
+            <div className="absolute top-1/3 -left-24 w-[400px] h-[400px] bg-emerald-200 opacity-[0.08] rounded-full blur-[100px] -z-10 pointer-events-none"></div>
+            <div className="absolute -top-24 -right-24 w-[500px] h-[500px] bg-brand-blue opacity-[0.10] rounded-full blur-[110px] -z-10 pointer-events-none"></div>
 
             <div className="flex flex-col items-center mb-6">
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-1 w-16 h-16 flex items-center justify-center mb-4 transition-all duration-300 hover:shadow-md">

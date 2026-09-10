@@ -1,15 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  /* ─── Primary: Deep Indigo ─── */
-  --color-brand-blue: #4F46E5;
-  --color-brand-blue-hover: #4338CA;
-  --color-brand-blue-light: #EEF2FF;
+  /* ─── Primary: Modern Emerald ─── */
+  --color-brand-blue: #059669;
+  --color-brand-blue-hover: #047857;
+  --color-brand-blue-light: #ECFDF5;
 
-  /* ─── Accent: Soft Violet ─── */
-  --color-brand-peacock: #7C3AED;
-  --color-brand-peacock-hover: #6D28D9;
-  --color-brand-peacock-light: #F5F3FF;
+  /* ─── Accent: Fresh Mint ─── */
+  --color-brand-peacock: #10B981;
+  --color-brand-peacock-hover: #059669;
+  --color-brand-peacock-light: #F0FDF4;
 }
 
 /* ─── Base ─────────────────────────────────────── */
@@ -18,8 +18,8 @@
 }
 
 body {
-  background: #F8F7FF;
-  color: #1E1B4B;
+  background: #F8FAFC;
+  color: #0F172A;
   font-family: 'Inter', Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -32,14 +32,14 @@ body {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #F5F3FF;
+  background: #F1F5F9;
 }
 ::-webkit-scrollbar-thumb {
-  background: #A5B4FC;
+  background: #6EE7B7;
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #4F46E5;
+  background: #059669;
 }
 
 /* ─── Smooth transitions ────────────────────────── */
@@ -51,8 +51,8 @@ body {
 
 /* ─── Selection ─────────────────────────────────── */
 ::selection {
-  background: #C7D2FE;
-  color: #1E1B4B;
+  background: #A7F3D0;
+  color: #064E3B;
 }
 
 /* ─── Animations ────────────────────────────────── */

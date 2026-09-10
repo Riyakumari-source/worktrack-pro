@@ -1753,7 +1753,7 @@ const EmployeeDashboard = () => {
 
                             {/* Clock In Control Panel Card */}
                             <div className="bg-white rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/30 p-6 sm:p-10 relative overflow-hidden transition-all duration-300 hover:shadow-2xl">
-                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-blue via-indigo-500 to-brand-peacock" />
+                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-blue via-emerald-400 to-brand-peacock" />
 
                                 {isSunday ? (
                                     <div className="flex flex-col items-center justify-center py-16 text-center">

@@ -645,7 +645,7 @@ const AdminDashboard = () => {
                                                     <span className={`text-[8px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1.5 w-fit ${
                                                         isActiveShift
                                                             ? (emp.currentStatus === "On Break" ? "bg-amber-50 border-amber-200 text-amber-600 animate-pulse" : "bg-green-50 border-green-200 text-green-600 animate-pulse")
-                                                            : (emp.shiftStatus === "Completed" ? "bg-indigo-50 border-indigo-200 text-indigo-600" :
+                                                            : (emp.shiftStatus === "Completed" ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
                                                                emp.shiftStatus === "Half Day" ? "bg-amber-50 border-amber-200 text-amber-600" :
                                                                emp.shiftStatus === "Absent" ? "bg-red-50 border-red-200 text-red-600" :
                                                                "bg-slate-50 border-slate-200 text-slate-400")
