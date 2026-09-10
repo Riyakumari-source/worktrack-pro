@@ -2,13 +2,14 @@ import fs from "fs";
 import path from "path";
 import app from "./app";
 import prisma from "./lib/prisma";
+import { appConfig } from "./config/app.config";
 
 const PORT = process.env.PORT || 5000;
 
 // Automated Storage optimization routine (purges screenshots older than 7 days)
 const runDailyScreenshotCleanup = async () => {
   try {
-    const daysToKeep = 7;
+    const daysToKeep = appConfig.screenshotRetentionDays;
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - daysToKeep);
 

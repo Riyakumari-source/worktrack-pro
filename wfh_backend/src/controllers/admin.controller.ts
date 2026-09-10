@@ -1,9 +1,7 @@
 import { Response } from "express";
 import prisma from "../lib/prisma";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
-
-// Configurable shift duration (default 8.5 hours)
-const AUTO_CLOCK_OUT_HOURS = parseFloat(process.env.AUTO_CLOCK_OUT_HOURS || "8.5");
+import { appConfig, formatBreakDuration } from "../config/app.config";
 
 export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -34,6 +32,7 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
             endLongitude: true,
             endAddress: true,
             endLocationFetchedAt: true,
+            clockOutReason: true,
             pdfReportName: true,
             pdfReportSize: true,
             pdfReportUploadedAt: true,
@@ -57,7 +56,7 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
             },
             telemetry: {
               orderBy: { timestamp: "desc" },
-              take: 1,
+              take: 20,
               select: {
                 x: true,
                 y: true,
@@ -94,11 +93,12 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
           shiftStartTime: undefined,
           shiftEndTime: undefined,
           shiftStatus: undefined,
-          breaks: { shortBreaksLeft: 3, lunchBreakUsed: false, totalDuration: "0m", history: [] },
+          breaks: { shortBreaksLeft: appConfig.shortBreakLimit, lunchBreakUsed: false, totalDuration: "0m", history: [] },
           tasks: [],
           pdfReport: null,
           activityLogs: ["No shift started today"],
           latestCoordinate: { x: 0, y: 0 },
+          productivityScore: null,
           wfhDaysCount: 0
         });
         continue;
@@ -118,7 +118,7 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
             where: { id: shift.id },
             data: {
               status: "Absent",
-              shiftEndTime: new Date(new Date(shift.shiftStartTime).getTime() + AUTO_CLOCK_OUT_HOURS * 60 * 60 * 1000)
+              shiftEndTime: new Date(new Date(shift.shiftStartTime).getTime() + appConfig.autoClockOutHours * 60 * 60 * 1000)
             },
             include: {
               breaks: true,
@@ -180,11 +180,20 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
       }
 
       // Gather breaks
-      const shortBreaks = shift.breaks.filter((b: any) => b.name.includes("Short"));
+      const shortBreaks = shift.breaks.filter((b: any) => b.name.toLowerCase().includes("short"));
+      const breakDurationMs = shift.breaks.reduce((acc: number, b: any) => {
+        const end = b.endTime ? new Date(b.endTime).getTime() : Date.now();
+        return acc + Math.max(0, end - new Date(b.startTime).getTime());
+      }, 0);
+      const telemetryLogs = shift.telemetry || [];
+      const movingCount = telemetryLogs.filter((l: any) => l.isMoving).length;
+      const productivityScore =
+        telemetryLogs.length > 0 ? Math.round((movingCount / telemetryLogs.length) * 100) : null;
+
       const breaks = {
-        shortBreaksLeft: Math.max(0, 3 - shortBreaks.length),
-        lunchBreakUsed: shift.breaks.some((b: any) => b.name.includes("Lunch")),
-        totalDuration: "0m",
+        shortBreaksLeft: Math.max(0, appConfig.shortBreakLimit - shortBreaks.length),
+        lunchBreakUsed: shift.breaks.some((b: any) => b.name.toLowerCase().includes("lunch")),
+        totalDuration: formatBreakDuration(breakDurationMs),
         history: shift.breaks.map((b: any) => ({
           name: b.name,
           time: new Date(b.startTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
@@ -243,11 +252,15 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
         shiftStartTime: `${shiftStartTimeStr} (${shiftDateStr})`,
         shiftEndTime: shiftEndTimeStr ? `${shiftEndTimeStr} (${shiftDateStr})` : undefined,
         shiftStatus: shift.status, // Database attendance status
+        shiftDateRaw: new Date(shift.shiftStartTime).toISOString().split('T')[0], // YYYY-MM-DD for grouping
+        shiftDateLabel: shiftDateStr, // "Sep 8, 2026" for display
         breaks,
         tasks,
         pdfReport,
         activityLogs,
         latestCoordinate,
+        productivityScore,
+        clockOutReason: (shift as any).clockOutReason || null,
         latitude: shift.latitude,
         longitude: shift.longitude,
         startAddress: shift.startAddress,
@@ -285,7 +298,7 @@ export const getEmployeeScreenshots = async (req: AuthenticatedRequest, res: Res
     }
 
     // Filter screenshots: strictly show only those captured within the last 24 hours
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - appConfig.adminScreenshotWindowHours * 60 * 60 * 1000);
 
     const dbScreenshots = await prisma.screenshot.findMany({
       where: {
@@ -433,6 +446,7 @@ export const getAllShifts = async (req: AuthenticatedRequest, res: Response): Pr
         endLatitude: s.endLatitude,
         endLongitude: s.endLongitude,
         endAddress: s.endAddress,
+        clockOutReason: s.clockOutReason,
         breaksCount: s.breaks.length,
         tasksCount: s.tasks.length,
         tasksCompletedCount: s.tasks.filter(t => t.completed).length,

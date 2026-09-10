@@ -21,8 +21,7 @@ import {
     FiCompass,
     FiMapPin
 } from "react-icons/fi";
- 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+import { API_BASE_URL } from "../config";
 
 interface EmployeeAuditData {
     employeeId: string;
@@ -36,6 +35,8 @@ interface EmployeeAuditData {
     shiftStartTime?: string;
     shiftEndTime?: string;
     shiftStatus?: string;
+    shiftDateRaw?: string;      // YYYY-MM-DD for date grouping
+    shiftDateLabel?: string;    // e.g. "Sep 8, 2026" for display
     breaks: {
         shortBreaksLeft: number;
         lunchBreakUsed: boolean;
@@ -398,7 +399,7 @@ const AdminDashboard = () => {
     ];
  
     return (
-        <div className="min-h-screen bg-[#f8fafc] flex relative overflow-hidden font-sans select-none">
+        <div className="min-h-screen bg-[#F8F7FF] flex relative overflow-hidden font-[Inter,sans-serif] select-none">
             {/* Background Accent Blobs */}
             <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-brand-blue/5 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-peacock/4 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
@@ -573,16 +574,15 @@ const AdminDashboard = () => {
                                 )}
                             </div>
 
-                            {/* Global Employee Directory with search filter */}
+                            {/* Global Employee Directory - Date Grouped */}
                             <div className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm space-y-6">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-50 pb-4">
                                     <div>
                                         <h3 className="text-base font-black text-slate-800 tracking-tight">Team Shift Directory</h3>
-                                        <p className="text-xs text-slate-400 font-semibold mt-0.5 flex items-center gap-2">
-                                            Status dashboard for all company remote employees.
+                                        <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                                            Date-wise shift history — Today's shifts shown at top, older shifts grouped below.
                                         </p>
                                     </div>
-                                    
                                     <div className="relative flex items-center w-full sm:max-w-xs">
                                         <input 
                                             type="text" 
@@ -595,84 +595,186 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col gap-3 select-none">
-                                    {filteredEmployees.map((emp) => {
+                                {(() => {
+                                    const todayStr = new Date().toISOString().split("T")[0];
+
+                                    // Employees WITH a shift
+                                    const withShift = filteredEmployees.filter(e => e.shiftDateRaw);
+                                    // Employees with NO shift at all
+                                    const noShift = filteredEmployees.filter(e => !e.shiftDateRaw);
+
+                                    // Group by date descending
+                                    const dateGroups: Record<string, EmployeeAuditData[]> = {};
+                                    withShift.forEach(emp => {
+                                        const key = emp.shiftDateRaw!;
+                                        if (!dateGroups[key]) dateGroups[key] = [];
+                                        dateGroups[key].push(emp);
+                                    });
+                                    const sortedDates = Object.keys(dateGroups).sort((a, b) => b.localeCompare(a));
+
+                                    const renderEmployeeRow = (emp: EmployeeAuditData) => {
                                         const isActiveShift = emp.isWfhActive;
-                                        
+                                        const hasShiftData = !!emp.shiftStartTime;
                                         return (
-                                            <div 
-                                                key={`${emp.employeeId}_${emp.role}`}
-                                                className={`bg-white rounded-2xl border p-4.5 shadow-sm transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative overflow-hidden ${
-                                                    isActiveShift 
-                                                        ? "border-brand-blue ring-2 ring-brand-blue/5 shadow-brand-blue/5 shadow-md" 
-                                                        : "border-slate-100 opacity-85"
+                                            <div
+                                                key={`${emp.employeeId}_${emp.shiftDateRaw}`}
+                                                className={`bg-white rounded-2xl border p-4 shadow-sm transition-all duration-300 flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative overflow-hidden ${
+                                                    isActiveShift
+                                                        ? "border-brand-blue ring-2 ring-brand-blue/5 shadow-brand-blue/5 shadow-md"
+                                                        : "border-slate-100"
                                                 }`}
                                             >
-                                                {/* Employee Avatar, Name, ID and Role */}
+                                                {/* Left: Avatar + Name */}
                                                 <div className="flex items-center gap-4 lg:w-1/4 shrink-0 min-w-0">
-                                                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-sm shadow shrink-0">
-                                                        {emp.avatar}
+                                                    <div className="relative shrink-0">
+                                                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-sm shadow">
+                                                            {emp.avatar}
+                                                        </div>
+                                                        {isActiveShift && (
+                                                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white animate-pulse" />
+                                                        )}
                                                     </div>
                                                     <div className="min-w-0">
                                                         <h4 className="text-xs font-bold text-slate-800 leading-tight truncate">{emp.name}</h4>
-                                                        <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{emp.employeeId} • {emp.role}</p>
+                                                        <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{emp.employeeId} • {emp.role.replace(/\s*\(.*?\)\s*/g, "")}</p>
                                                     </div>
                                                 </div>
 
-                                                {/* Active / Offline badge */}
+                                                {/* Status badge */}
                                                 <div className="lg:w-1/5 shrink-0">
                                                     <span className={`text-[8px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1.5 w-fit ${
-                                                        isActiveShift 
+                                                        isActiveShift
                                                             ? (emp.currentStatus === "On Break" ? "bg-amber-50 border-amber-200 text-amber-600 animate-pulse" : "bg-green-50 border-green-200 text-green-600 animate-pulse")
-                                                            : (emp.shiftStatus === "Completed" ? "bg-blue-50 border-blue-200 text-blue-600" :
+                                                            : (emp.shiftStatus === "Completed" ? "bg-indigo-50 border-indigo-200 text-indigo-600" :
                                                                emp.shiftStatus === "Half Day" ? "bg-amber-50 border-amber-200 text-amber-600" :
                                                                emp.shiftStatus === "Absent" ? "bg-red-50 border-red-200 text-red-600" :
                                                                "bg-slate-50 border-slate-200 text-slate-400")
                                                     }`}>
-                                                        {isActiveShift 
-                                                            ? (emp.currentStatus === "On Break" ? "On Break" : "WFH Shift Active") 
-                                                            : (emp.shiftStatus || (emp.shiftStartTime ? "Completed" : "Not Started"))}
+                                                        {isActiveShift
+                                                            ? (emp.currentStatus === "On Break" ? "On Break" : "WFH Shift Active")
+                                                            : (emp.shiftStatus || "Completed")}
                                                     </span>
                                                 </div>
 
-                                                {/* Start Time block */}
-                                                <div className="lg:w-1/6 shrink-0">
-                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start Time</span>
+                                                {/* Shift time */}
+                                                <div className="lg:w-1/5 shrink-0">
+                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start</span>
                                                     <span className="font-extrabold text-slate-700 tabular-nums text-xs mt-0.5 block">
-                                                        {emp.shiftStartTime ? emp.shiftStartTime : "--:--"}
+                                                        {emp.shiftStartTime
+                                                            ? emp.shiftStartTime.replace(/\s*\(.*?\)\s*/, "")
+                                                            : "--:--"}
                                                     </span>
                                                 </div>
 
-
-                                                {/* View Details button is ACTIVE/ENABLED for any shift that has started! */}
-                                                {(() => {
-                                                    const hasShiftData = emp.shiftStartTime !== undefined;
-                                                    return (
-                                                        <button 
-                                                            onClick={() => hasShiftData && setDetailsModalEmp(emp)}
-                                                            disabled={!hasShiftData}
-                                                            className={`py-2.5 px-6 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all duration-300 w-full lg:w-auto shrink-0 text-center ${
-                                                                hasShiftData 
-                                                                    ? "bg-gradient-to-r from-brand-blue to-brand-peacock text-white shadow-md shadow-brand-blue/10 hover:shadow-lg cursor-pointer active:scale-[0.98]" 
-                                                                    : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50"
-                                                            }`}
-                                                        >
-                                                            {hasShiftData ? (
-                                                                <>
-                                                                    <FiMonitor size={12} /> View Details
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <FiLock size={12} /> View Details
-                                                                </>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })()}
+                                                {/* View Details */}
+                                                <button
+                                                    onClick={() => hasShiftData && setDetailsModalEmp(emp)}
+                                                    disabled={!hasShiftData}
+                                                    className={`py-2.5 px-6 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all duration-300 w-full lg:w-auto shrink-0 ${
+                                                        hasShiftData
+                                                            ? "bg-gradient-to-r from-brand-blue to-brand-peacock text-white shadow-md shadow-brand-blue/10 hover:shadow-lg cursor-pointer active:scale-[0.98]"
+                                                            : "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50"
+                                                    }`}
+                                                >
+                                                    {hasShiftData ? <><FiMonitor size={12} /> View Details</> : <><FiLock size={12} /> View Details</>}
+                                                </button>
                                             </div>
                                         );
-                                    })}
-                                </div>
+                                    };
+
+                                    return (
+                                        <div className="flex flex-col gap-6 select-none">
+                                            {sortedDates.map(dateKey => {
+                                                const isToday = dateKey === todayStr;
+                                                const emps = dateGroups[dateKey];
+                                                const label = emps[0]?.shiftDateLabel || dateKey;
+                                                const activeCount = emps.filter(e => e.isWfhActive).length;
+
+                                                return (
+                                                    <div key={dateKey} className="flex flex-col gap-3">
+                                                        {/* Date section header */}
+                                                        <div className={`flex items-center gap-3 px-1`}>
+                                                            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border ${
+                                                                isToday
+                                                                    ? "bg-brand-blue text-white border-brand-blue shadow-md shadow-brand-blue/20"
+                                                                    : "bg-slate-50 text-slate-500 border-slate-200"
+                                                            }`}>
+                                                                <FiCalendar size={10} />
+                                                                {isToday ? `Today — ${label}` : label}
+                                                            </div>
+                                                            <div className="flex-1 h-px bg-slate-100" />
+                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                                                {emps.length} employee{emps.length !== 1 ? "s" : ""}
+                                                                {activeCount > 0 && isToday && (
+                                                                    <span className="ml-1.5 text-green-500">• {activeCount} active</span>
+                                                                )}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Employee rows for this date */}
+                                                        <div className="flex flex-col gap-2.5">
+                                                            {emps
+                                                                .sort((a, b) => (b.isWfhActive ? 1 : 0) - (a.isWfhActive ? 1 : 0))
+                                                                .map(renderEmployeeRow)}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {/* No-shift employees at the bottom */}
+                                            {noShift.length > 0 && (
+                                                <div className="flex flex-col gap-3">
+                                                    <div className="flex items-center gap-3 px-1">
+                                                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border bg-slate-50 text-slate-400 border-slate-200">
+                                                            <FiClock size={10} />
+                                                            Not Started Today
+                                                        </div>
+                                                        <div className="flex-1 h-px bg-slate-100" />
+                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                                            {noShift.length} employee{noShift.length !== 1 ? "s" : ""}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2.5">
+                                                        {noShift.map(emp => (
+                                                            <div
+                                                                key={emp.employeeId}
+                                                                className="bg-white rounded-2xl border border-slate-100 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 opacity-60"
+                                                            >
+                                                                <div className="flex items-center gap-4 lg:w-1/4 shrink-0 min-w-0">
+                                                                    <div className="w-11 h-11 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-bold text-sm shadow shrink-0">
+                                                                        {emp.avatar}
+                                                                    </div>
+                                                                    <div className="min-w-0">
+                                                                        <h4 className="text-xs font-bold text-slate-600 leading-tight truncate">{emp.name}</h4>
+                                                                        <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{emp.employeeId} • {emp.role.replace(/\s*\(.*?\)\s*/g, "")}</p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="lg:w-1/5 shrink-0">
+                                                                    <span className="text-[8px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border flex items-center gap-1.5 w-fit bg-slate-50 border-slate-200 text-slate-400">
+                                                                        Not Started
+                                                                    </span>
+                                                                </div>
+                                                                <div className="lg:w-1/5 shrink-0">
+                                                                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start</span>
+                                                                    <span className="font-extrabold text-slate-400 tabular-nums text-xs mt-0.5 block">--:--</span>
+                                                                </div>
+                                                                <button disabled className="py-2.5 px-6 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50 w-full lg:w-auto shrink-0">
+                                                                    <FiLock size={12} /> View Details
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {filteredEmployees.length === 0 && (
+                                                <div className="py-12 text-center text-slate-400 font-bold text-xs uppercase tracking-wider bg-slate-50/50 border border-slate-100 rounded-2xl">
+                                                    No employees found matching your search.
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
                     )}

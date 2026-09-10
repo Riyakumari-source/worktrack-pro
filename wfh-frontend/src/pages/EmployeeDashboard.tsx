@@ -24,8 +24,13 @@ import {
     FiMapPin
 } from "react-icons/fi";
 import EmployeeSidebar from "@/components/EmployeeSidebar";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+import {
+    API_BASE_URL,
+    DEFAULT_PUBLIC_CONFIG,
+    fetchAppConfig,
+    formatLunchUnlockLabel,
+    type PublicAppConfig,
+} from "../config";
 
 interface TaskItem {
     id: string | number;
@@ -71,6 +76,7 @@ const EmployeeDashboard = () => {
         navigate("/login");
     };
     const [activeTab, setActiveTab] = useState("Dashboard");
+    const [appCfg, setAppCfg] = useState<PublicAppConfig>(DEFAULT_PUBLIC_CONFIG);
 
     const userName = sessionStorage.getItem("wfh_user_name") || "Employee User";
     const userEmpId = sessionStorage.getItem("wfh_logged_in_user") || "";
@@ -94,15 +100,15 @@ const EmployeeDashboard = () => {
     
     // Timers (in seconds)
     const [workTime, setWorkTime] = useState(0); 
-    const [targetSeconds, setTargetSeconds] = useState(30599); // 8:29:59 default
+    const [targetSeconds, setTargetSeconds] = useState(DEFAULT_PUBLIC_CONFIG.shiftTargetSeconds);
     const [isSunday, setIsSunday] = useState(false);
 
-    // Productivity & Guard states
-    const [productivityScore, setProductivityScore] = useState(98);
+    // Productivity from telemetry heartbeats (moving / total)
+    const [telemetrySamples, setTelemetrySamples] = useState({ moving: 0, total: 0 });
     const [overtimeGuardActive, setOvertimeGuardActive] = useState(true);
 
     // BREAK MANAGEMENT states
-    const [shortBreaksLeft, setShortBreaksLeft] = useState(3);
+    const [shortBreaksLeft, setShortBreaksLeft] = useState(DEFAULT_PUBLIC_CONFIG.shortBreakLimit);
     const [lunchBreakUsed, setLunchBreakUsed] = useState(false);
     const [activeBreakType, setActiveBreakType] = useState<"Short" | "Lunch" | null>(null);
     const [breakRemaining, setBreakRemaining] = useState(0);
@@ -110,22 +116,25 @@ const EmployeeDashboard = () => {
 
     // Grace period state (Condition 2: 15-second grace period)
     const [showGraceAlert, setShowGraceAlert] = useState(false);
-    const [graceSecondsLeft, setGraceSecondsLeft] = useState(15);
+    const [graceSecondsLeft, setGraceSecondsLeft] = useState(DEFAULT_PUBLIC_CONFIG.breakGraceSeconds);
     
     // ACTIVITY / INACTIVITY states
     const [idleTime, setIdleTime] = useState(0);
     const lastActiveTimeRef = useRef<number>(Date.now());
     const [backgroundHiddenStart, setBackgroundHiddenStart] = useState<number | null>(null);
-    // const [cursorPos, setCursorPos] = useState({ x: 120, y: 85 });
+    const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
     const [activityLogs, setActivityLogs] = useState<string[]>([
         `[${new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}] Activity Tracker Initialized Successfully`
     ]);
-    const [companionSimulated, setCompanionSimulated] = useState(true);
+    const clockOutInProgressRef = useRef(false);
+    const systemClockOutRef = useRef<(reason: string, message: string) => Promise<void>>(async () => {});
+    const appCfgRef = useRef(appCfg);
+    appCfgRef.current = appCfg;
 
     // ==========================================
     // SCREENSHOT MONITORING STATES
     // ==========================================
-    const [screenCountdown, setScreenCountdown] = useState(1800); // 30 minutes (1800 seconds)
+    const [screenCountdown, setScreenCountdown] = useState(DEFAULT_PUBLIC_CONFIG.screenshotIntervalSeconds);
     const [screenshots, setScreenshots] = useState<any[]>([]);
     const [screenNotification, setScreenNotification] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
     const screenStreamRef = useRef<MediaStream | null>(null);
@@ -137,7 +146,7 @@ const EmployeeDashboard = () => {
     const [tasks, setTasks] = useState<TaskItem[]>([
         { id: "temp-1", text: "", completed: false }
     ]);
-    const [taskAssignTime, setTaskAssignTime] = useState(1800); // 30 Minutes (1800 seconds)
+    const [taskAssignTime, setTaskAssignTime] = useState(DEFAULT_PUBLIC_CONFIG.taskAssignSeconds);
     const [isTaskLocked, setIsTaskLocked] = useState(false);
 
     // Dynamic database-driven state variables
@@ -243,8 +252,8 @@ const EmployeeDashboard = () => {
         }
     };
 
-    // Helper to capture and upload a simulated or live screenshot
-    const uploadMockScreenshot = async () => {
+    // Helper to capture and upload a live screen capture frame
+    const captureAndUploadLiveScreenshot = async () => {
         try {
             // Check if we have an active live screen capture stream!
             if (screenStreamRef.current && screenStreamRef.current.active) {
@@ -296,85 +305,7 @@ const EmployeeDashboard = () => {
                 return;
             }
 
-            // Fallback: Generate Canvas placeholder UI
-            const canvas = document.createElement("canvas");
-            canvas.width = 800;
-            canvas.height = 600;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return;
-
-            // Gradient background
-            const grad = ctx.createLinearGradient(0, 0, 800, 600);
-            grad.addColorStop(0, "#0f172a"); // slate-900
-            grad.addColorStop(1, "#1e293b"); // slate-800
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 800, 600);
-
-            // Draw header bar
-            ctx.fillStyle = "#1e293b";
-            ctx.fillRect(0, 0, 800, 50);
-
-            // Header text
-            ctx.fillStyle = "#f8fafc";
-            ctx.font = "bold 15px sans-serif";
-            ctx.fillText("company@demo WFH Client Dashboard - Screen Capture", 20, 30);
-
-            // Draw a mock window card
-            ctx.fillStyle = "#ffffff";
-            ctx.beginPath();
-            ctx.roundRect ? ctx.roundRect(50, 90, 700, 420, 16) : ctx.rect(50, 90, 700, 420);
-            ctx.fill();
-
-            // Mock window card title bar
-            ctx.fillStyle = "#f1f5f9";
-            ctx.beginPath();
-            ctx.roundRect ? ctx.roundRect(50, 90, 700, 50, [16, 16, 0, 0]) : ctx.rect(50, 90, 700, 50);
-            ctx.fill();
-
-            // Window card title text
-            ctx.fillStyle = "#334155";
-            ctx.font = "bold 13px sans-serif";
-            ctx.fillText("Live Compliance Tracker (Active)", 80, 120);
-
-            // Details inside mock window
-            ctx.fillStyle = "#475569";
-            ctx.font = "12px sans-serif";
-            ctx.fillText(`Employee Name: ${userName}`, 80, 180);
-            ctx.fillText(`Employee ID: ${userEmpId}`, 80, 210);
-            ctx.fillText(`Role: ${userRole}`, 80, 240);
-            ctx.fillText(`IP Address: ${systemIp}`, 80, 270);
-            ctx.fillText(`Timestamp: ${new Date().toLocaleString()}`, 80, 300);
-            ctx.fillText(`Telemetry Status: SECURE & VERIFIED`, 80, 330);
-
-            // Draw compliance grid circles
-            ctx.fillStyle = "#10b981"; // Green dot
-            ctx.beginPath();
-            ctx.arc(80, 380, 8, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = "#1e293b";
-            ctx.fillText("Active Shift Tracking Enabled", 96, 384);
-
-            canvas.toBlob(async (blob) => {
-                if (!blob) return;
-                const file = new File([blob], `screenshot-${Date.now()}.png`, { type: "image/png" });
-
-                const token = sessionStorage.getItem("wfh_auth_token");
-                const formData = new FormData();
-                formData.append("screenshot", file);
-                formData.append("activeWindow", "company@demo WFH Portal");
-
-                const res = await fetch(`${API_BASE_URL}/api/telemetry/screenshot/upload`, {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: formData
-                });
-
-                if (res.ok) {
-                    fetchScreenshots();
-                }
-            }, "image/png");
+            console.warn("Live screen share is not active; skipping placeholder screenshot upload.");
         } catch (err) {
             console.error("Failed to capture and upload screenshot:", err);
         }
@@ -412,6 +343,15 @@ const EmployeeDashboard = () => {
 
         const recoverActiveShift = async () => {
             try {
+                const cfg = await fetchAppConfig();
+                setAppCfg(cfg);
+                setGraceSecondsLeft(cfg.breakGraceSeconds);
+                setScreenCountdown(cfg.screenshotIntervalSeconds);
+                if (!isClockedIn) {
+                    setTaskAssignTime(cfg.taskAssignSeconds);
+                    setShortBreaksLeft(cfg.shortBreakLimit);
+                }
+
                 const token = sessionStorage.getItem("wfh_auth_token");
                 const res = await fetch(`${API_BASE_URL}/api/shifts/active`, {
                     headers: {
@@ -431,13 +371,12 @@ const EmployeeDashboard = () => {
                         const elapsedSecs = Math.floor((Date.now() - startMs) / 1000);
                         setWorkTime(elapsedSecs);
 
-                        // Calculate remaining task assignment time dynamically from shift start
                         const elapsedTaskSecs = Math.floor((Date.now() - startMs) / 1000);
-                        if (elapsedTaskSecs >= 1800) {
+                        if (elapsedTaskSecs >= cfg.taskAssignSeconds) {
                             setTaskAssignTime(0);
                             setIsTaskLocked(true);
                         } else {
-                            setTaskAssignTime(1800 - elapsedTaskSecs);
+                            setTaskAssignTime(cfg.taskAssignSeconds - elapsedTaskSecs);
                             setIsTaskLocked(false);
                         }
 
@@ -470,20 +409,18 @@ const EmployeeDashboard = () => {
                             setPdfFile(null);
                         }
 
-                        // Load breaks
-                        const shortBreaks = s.breaks.filter((b: any) => b.name.includes("Short"));
-                        setShortBreaksLeft(Math.max(0, 3 - shortBreaks.length));
-                        setLunchBreakUsed(s.breaks.some((b: any) => b.name.includes("Lunch")));
+                        const shortBreaks = (s.breaks || []).filter((b: any) => b.name.toLowerCase().includes("short"));
+                        setShortBreaksLeft(Math.max(0, cfg.shortBreakLimit - shortBreaks.length));
+                        setLunchBreakUsed((s.breaks || []).some((b: any) => b.name.toLowerCase().includes("lunch")));
 
-                        // Active break session?
-                        const activeBreak = s.breaks.find((b: any) => b.endTime === null);
+                        const activeBreak = (s.breaks || []).find((b: any) => b.endTime === null);
                         if (activeBreak) {
                             setCurrentStatus("On Break");
-                            const isLunch = activeBreak.name.includes("Lunch");
+                            const isLunch = activeBreak.name.toLowerCase().includes("lunch");
                             setActiveBreakType(isLunch ? "Lunch" : "Short");
                             
                             const breakStartMs = new Date(activeBreak.startTime).getTime();
-                            const limitSecs = isLunch ? 2700 : 900;
+                            const limitSecs = isLunch ? cfg.lunchBreakSeconds : cfg.shortBreakSeconds;
                             const elapsedBreakSecs = Math.floor((Date.now() - breakStartMs) / 1000);
                             setBreakRemaining(Math.max(0, limitSecs - elapsedBreakSecs));
                         } else {
@@ -559,19 +496,16 @@ const EmployeeDashboard = () => {
         return () => window.removeEventListener("beforeunload", handleBeforeUnload);
     }, []);
 
-    // Target work hours config
     useEffect(() => {
         const today = new Date();
-        const dayOfWeek = today.getDay();
-        
-        if (dayOfWeek === 0) {
+        if (today.getDay() === 0) {
             setIsSunday(true);
             setTargetSeconds(0);
         } else {
             setIsSunday(false);
-            setTargetSeconds(30599); // 8:29:59 Hours
+            setTargetSeconds(appCfg.shiftTargetSeconds);
         }
-    }, []);
+    }, [appCfg.shiftTargetSeconds]);
 
     // Live clock ticks
     useEffect(() => {
@@ -604,14 +538,14 @@ const EmployeeDashboard = () => {
             
             if (showGraceAlert) {
                 setShowGraceAlert(false);
-                setGraceSecondsLeft(15);
+                setGraceSecondsLeft(appCfgRef.current.breakGraceSeconds);
                 setCurrentStatus("Active");
                 setActiveBreakType(null);
             }
         };
 
         const handleMouseMove = (e: MouseEvent) => {
-            // setCursorPos({ x: e.clientX, y: e.clientY });
+            setCursorPos({ x: e.clientX, y: e.clientY });
             resetIdle();
             
             if (Math.random() < 0.03) {
@@ -634,13 +568,13 @@ const EmployeeDashboard = () => {
             ]);
         };
 
-        // window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mousemove", handleMouseMove);
         window.addEventListener("keydown", handleKeyDown);
         window.addEventListener("click", resetIdle);
         window.addEventListener("scroll", resetIdle);
 
         return () => {
-            // window.removeEventListener("mousemove", handleMouseMove);
+            window.removeEventListener("mousemove", handleMouseMove);
             window.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("click", resetIdle);
             window.removeEventListener("scroll", resetIdle);
@@ -656,20 +590,19 @@ const EmployeeDashboard = () => {
             hasActivityThisPeriodRef.current = true;
         };
 
-        // window.addEventListener("mousemove", recordActivityFlag);
+        window.addEventListener("mousemove", recordActivityFlag);
         window.addEventListener("keydown", recordActivityFlag);
         window.addEventListener("click", recordActivityFlag);
         window.addEventListener("scroll", recordActivityFlag);
 
         return () => {
-            // window.removeEventListener("mousemove", recordActivityFlag);
+            window.removeEventListener("mousemove", recordActivityFlag);
             window.removeEventListener("keydown", recordActivityFlag);
             window.removeEventListener("click", recordActivityFlag);
             window.removeEventListener("scroll", recordActivityFlag);
         };
     }, [isClockedIn, currentStatus]);
 
-    /*
     useEffect(() => {
         if (!isClockedIn || currentStatus !== "Active") return;
 
@@ -677,7 +610,7 @@ const EmployeeDashboard = () => {
             try {
                 const token = sessionStorage.getItem("wfh_auth_token");
                 const isMoving = hasActivityThisPeriodRef.current;
-                hasActivityThisPeriodRef.current = false; // Reset for next interval
+                hasActivityThisPeriodRef.current = false;
 
                 await fetch(`${API_BASE_URL}/api/shifts/telemetry`, {
                     method: "POST",
@@ -691,6 +624,11 @@ const EmployeeDashboard = () => {
                         isMoving
                     })
                 });
+
+                setTelemetrySamples((prev) => ({
+                    moving: prev.moving + (isMoving ? 1 : 0),
+                    total: prev.total + 1,
+                }));
             } catch (err) {
                 console.error("Failed to post mouse telemetry heartbeat:", err);
             }
@@ -699,7 +637,6 @@ const EmployeeDashboard = () => {
         const interval = setInterval(sendTelemetryLogs, 5000);
         return () => clearInterval(interval);
     }, [isClockedIn, currentStatus, cursorPos]);
-    */
 
     // Page Visibility Tracker
     useEffect(() => {
@@ -713,18 +650,11 @@ const EmployeeDashboard = () => {
                     const elapsedMs = Date.now() - backgroundHiddenStart;
                     const elapsedSecs = Math.floor(elapsedMs / 1000);
                     
-                    if (elapsedSecs >= 420) {
-                        if (companionSimulated) {
-                            const now = new Date();
-                            const ts = now.toLocaleTimeString("en-US", { hour12: true });
-                            setActivityLogs(prev => [
-                                `[${ts}] Background Activity registered via Desktop Companion Simulation`,
-                                ...prev.slice(0, 4)
-                            ]);
-                        } else {
-                            handleLogout();
-                            alert("Auto Logout: Workspace remained minimized or hidden in the background for more than 7 minutes.");
-                        }
+                    if (elapsedSecs >= appCfgRef.current.backgroundHiddenTimeoutSeconds) {
+                        void systemClockOutRef.current(
+                            "idle_timeout",
+                            `Auto Logout: Workspace remained minimized or hidden in the background for more than ${Math.round(appCfgRef.current.backgroundHiddenTimeoutSeconds / 60)} minutes.`
+                        );
                     }
                     setBackgroundHiddenStart(null);
                 }
@@ -733,7 +663,7 @@ const EmployeeDashboard = () => {
 
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-    }, [isClockedIn, backgroundHiddenStart, navigate, companionSimulated]);
+    }, [isClockedIn, backgroundHiddenStart, navigate]);
 
     // Main interval loop for timers, countdowns and auto captures
     useEffect(() => {
@@ -741,26 +671,25 @@ const EmployeeDashboard = () => {
 
         const mainTimer = setInterval(() => {
             if (currentStatus === "Active") {
-                if (document.hidden && companionSimulated) {
-                    lastActiveTimeRef.current = Date.now();
-                }
 
                 const elapsedSecs = Math.floor((Date.now() - lastActiveTimeRef.current) / 1000);
                 setIdleTime(elapsedSecs);
 
-                // 7-Minute Idle auto lock
-                if (elapsedSecs >= 420) {
-                    handleLogout();
-                    alert("Auto Logout: Inactive for 7 minutes.");
+                if (elapsedSecs >= appCfgRef.current.idleTimeoutSeconds) {
+                    void systemClockOutRef.current(
+                        "idle_timeout",
+                        `Auto Logout: Inactive for ${Math.round(appCfgRef.current.idleTimeoutSeconds / 60)} minutes.`
+                    );
                     return;
                 }
 
                 setWorkTime(prev => {
                     const nextTime = prev + 1;
                     if (overtimeGuardActive && nextTime >= targetSeconds) {
-                        setIsClockedIn(false);
-                        setCurrentStatus("Offline");
-                        alert("Shift Goal Completed! Overtime Guard clocked you out.");
+                        void systemClockOutRef.current(
+                            "overtime_guard",
+                            "Shift Goal Completed! Overtime Guard clocked you out."
+                        );
                         return targetSeconds;
                     }
                     return nextTime;
@@ -774,11 +703,10 @@ const EmployeeDashboard = () => {
                     return prev - 1;
                 });
 
-                // Decrement screenshot countdown
                 setScreenCountdown(prev => {
                     if (prev <= 1) {
-                        uploadMockScreenshot();
-                        return 1800; // Reset to 30 minutes
+                        captureAndUploadLiveScreenshot();
+                        return appCfgRef.current.screenshotIntervalSeconds;
                     }
                     return prev - 1;
                 });
@@ -788,7 +716,7 @@ const EmployeeDashboard = () => {
                 setBreakRemaining(prev => {
                     if (prev <= 1) {
                         setShowGraceAlert(true);
-                        setGraceSecondsLeft(15);
+                        setGraceSecondsLeft(appCfgRef.current.breakGraceSeconds);
                         return 0;
                     }
                     return prev - 1;
@@ -799,8 +727,10 @@ const EmployeeDashboard = () => {
                 setGraceSecondsLeft(prev => {
                     if (prev <= 1) {
                         setShowGraceAlert(false);
-                        handleLogout();
-                        alert("Auto Logout: Break exceeded grace limit.");
+                        void systemClockOutRef.current(
+                            "break_exceeded",
+                            "Auto Logout: Break exceeded grace limit."
+                        );
                         return 0;
                     }
                     return prev - 1;
@@ -810,15 +740,6 @@ const EmployeeDashboard = () => {
 
         return () => clearInterval(mainTimer);
     }, [isClockedIn, currentStatus, isSunday, showGraceAlert, overtimeGuardActive, targetSeconds]);
-
-    // Fluctuate productivity
-    useEffect(() => {
-        if (!isClockedIn || currentStatus !== "Active") return;
-        const prodInterval = setInterval(() => {
-            setProductivityScore(Math.floor(Math.random() * (99 - 95 + 1)) + 95);
-        }, 4000);
-        return () => clearInterval(prodInterval);
-    }, [isClockedIn, currentStatus]);
 
     const getGPSCoordinates = (): Promise<GeolocationPosition> => {
         return new Promise((resolve, reject) => {
@@ -852,6 +773,78 @@ const EmployeeDashboard = () => {
             return `Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
         }
     };
+
+    const stopScreenShare = () => {
+        if (screenStreamRef.current) {
+            screenStreamRef.current.getTracks().forEach((track) => track.stop());
+            screenStreamRef.current = null;
+        }
+    };
+
+    const persistClockOut = async (opts: {
+        reason?: string;
+        requireGps: boolean;
+        fallbackAddress: string;
+        onStatus?: (text: string) => void;
+    }) => {
+        let latitude: number | null = null;
+        let longitude: number | null = null;
+        let endAddress = opts.fallbackAddress;
+
+        try {
+            opts.onStatus?.("Requesting GPS location...");
+            const position = await getGPSCoordinates();
+            latitude = position.coords.latitude;
+            longitude = position.coords.longitude;
+            opts.onStatus?.("Resolving physical address...");
+            endAddress = await reverseGeocode(latitude, longitude);
+        } catch (err) {
+            if (opts.requireGps) {
+                throw err;
+            }
+            console.warn("GPS unavailable for clock-out; storing fallback address.", err);
+        }
+
+        const token = sessionStorage.getItem("wfh_auth_token");
+        opts.onStatus?.("Syncing clock-out with server...");
+        const res = await fetch(`${API_BASE_URL}/api/shifts/clock-out`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                latitude,
+                longitude,
+                endAddress,
+                reason: opts.reason,
+            }),
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error((data as { error?: string }).error || "Failed to clock out");
+        }
+        return res;
+    };
+
+    const performSystemClockOut = async (reason: string, userMessage: string) => {
+        if (clockOutInProgressRef.current) return;
+        clockOutInProgressRef.current = true;
+        try {
+            await persistClockOut({
+                reason,
+                requireGps: false,
+                fallbackAddress: userMessage,
+            });
+        } catch (err) {
+            console.error("System clock-out failed:", err);
+        }
+        stopScreenShare();
+        alert(userMessage);
+        handleLogout();
+    };
+    systemClockOutRef.current = performSystemClockOut;
 
     useEffect(() => {
         if (!isClockedIn) {
@@ -898,41 +891,17 @@ const EmployeeDashboard = () => {
     };
 
     const handleForceClockOut = async () => {
-        let outLat = 0;
-        let outLon = 0;
-        let outAddress = "Shift Ended Forcefully - Screen Share Stopped";
         try {
-            const position = await getGPSCoordinates();
-            outLat = position.coords.latitude;
-            outLon = position.coords.longitude;
-            outAddress = await reverseGeocode(outLat, outLon);
-        } catch (err) {
-            console.warn("Could not retrieve GPS for force clock-out:", err);
-        }
-
-        const token = sessionStorage.getItem("wfh_auth_token");
-        try {
-            await fetch(`${API_BASE_URL}/api/shifts/clock-out`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    latitude: outLat,
-                    longitude: outLon,
-                    endAddress: outAddress
-                })
+            await persistClockOut({
+                reason: "screen_share_stopped",
+                requireGps: false,
+                fallbackAddress: "Shift Ended Forcefully - Screen Share Stopped",
             });
         } catch (e) {
             console.error("Force clock out API failed:", e);
         }
 
-        if (screenStreamRef.current) {
-            screenStreamRef.current.getTracks().forEach(track => track.stop());
-            screenStreamRef.current = null;
-        }
-
+        stopScreenShare();
         setIsClockedIn(false);
         setCurrentStatus("Offline");
         setClockInTime(null);
@@ -1031,13 +1000,13 @@ const EmployeeDashboard = () => {
                 setClockInTime(now.toLocaleTimeString("en-US", { hour12: true }));
                 lastActiveTimeRef.current = Date.now();
                 setIdleTime(0);
-                setTaskAssignTime(1800); // 30 minutes
+                setTaskAssignTime(appCfg.taskAssignSeconds);
                 setIsTaskLocked(false);
                 setTasks([{ id: "temp-1", text: "", completed: false }]);
 
                 // Immediately capture and upload the first compliance screenshot!
                 setTimeout(() => {
-                    uploadMockScreenshot();
+                    captureAndUploadLiveScreenshot();
                 }, 1000);
             } catch (err) {
                 console.error("Failed to clock in:", err);
@@ -1131,7 +1100,7 @@ const EmployeeDashboard = () => {
 
         try {
             const token = sessionStorage.getItem("wfh_auth_token");
-            const breakNameStr = `Short Break ${4 - shortBreaksLeft}`;
+            const breakNameStr = `Short Break ${appCfg.shortBreakLimit + 1 - shortBreaksLeft}`;
             const res = await fetch(`${API_BASE_URL}/api/shifts/breaks/start`, {
                 method: "POST",
                 headers: {
@@ -1145,7 +1114,7 @@ const EmployeeDashboard = () => {
                 setShortBreaksLeft(prev => prev - 1);
                 setCurrentStatus("On Break");
                 setActiveBreakType("Short");
-                setBreakRemaining(900); // 15 mins
+                setBreakRemaining(appCfg.shortBreakSeconds);
                 setIdleTime(0);
             } else {
                 const data = await res.json();
@@ -1172,8 +1141,8 @@ const EmployeeDashboard = () => {
         }
 
         const now = new Date();
-        if (now.getHours() < 13) {
-            alert("Lunch Break is locked. It will automatically unlock starting at 1:00 PM!");
+        if (now.getHours() < appCfg.lunchUnlockHour) {
+            alert(`Lunch Break is locked. It will automatically unlock starting at ${formatLunchUnlockLabel(appCfg.lunchUnlockHour)}!`);
             return;
         }
 
@@ -1192,7 +1161,7 @@ const EmployeeDashboard = () => {
                 setLunchBreakUsed(true);
                 setCurrentStatus("On Break");
                 setActiveBreakType("Lunch");
-                setBreakRemaining(2700); // 45 mins
+                setBreakRemaining(appCfg.lunchBreakSeconds);
                 setIdleTime(0);
             } else {
                 const data = await res.json();
@@ -1260,7 +1229,7 @@ const EmployeeDashboard = () => {
                     const h = Math.floor(totalMins / 60);
                     const m = totalMins % 60;
                     hrs = `${String(h).padStart(2, '0')}h : ${String(m).padStart(2, '0')}m`;
-                    percent = Math.min(100, Math.floor((elapsed / (8.5 * 3600)) * 100));
+                    percent = Math.min(100, Math.floor((elapsed / (appCfg.autoClockOutHours * 3600)) * 100));
                     completed = false;
                 } else {
                     const startMs = new Date(shiftForDay.shiftStartTime).getTime();
@@ -1270,7 +1239,7 @@ const EmployeeDashboard = () => {
                     const h = Math.floor(totalMins / 60);
                     const m = totalMins % 60;
                     hrs = `${String(h).padStart(2, '0')}h : ${String(m).padStart(2, '0')}m`;
-                    percent = Math.min(100, Math.floor(((totalMins * 60) / (8.5 * 3600)) * 100));
+                    percent = Math.min(100, Math.floor(((totalMins * 60) / (appCfg.autoClockOutHours * 3600)) * 100));
                     completed = shiftForDay.status === "Completed";
                 }
             } else if (isSundayDay) {
@@ -1442,26 +1411,33 @@ const EmployeeDashboard = () => {
             return;
         }
 
-        // Successfully Clock Out shift on submission
         try {
-            const token = sessionStorage.getItem("wfh_auth_token");
-            await fetch(`${API_BASE_URL}/api/shifts/clock-out`, {
-                method: "POST",
-                headers: {
-                    "Authorization": `Bearer ${token}`
-                }
+            setIsClockingIn(true);
+            await persistClockOut({
+                requireGps: true,
+                fallbackAddress: "Employee submitted daily report",
+                onStatus: setLocationStatusText,
             });
-        } catch (err) {
-            console.error("Failed to auto clock out on submit:", err);
+        } catch (err: any) {
+            console.error("Failed to clock out on submit:", err);
+            alert(err?.message || "❌ Shift End Blocked: Enable GPS location and retry submitting your shift.");
+            setIsClockingIn(false);
+            setLocationStatusText(null);
+            return;
         }
 
-        alert("🎉 Shift and Tasks Submitted Successfully! Today's attendance has been marked as PRESENT. Logging out...");
+        stopScreenShare();
+        alert("🎉 Shift and Tasks Submitted Successfully! Today's attendance has been marked. Logging out...");
         handleLogout();
     };
 
 
     const workPercent = targetSeconds > 0 ? Math.min((workTime / targetSeconds) * 100, 100) : 0;
     const remainingTime = Math.max(targetSeconds - workTime, 0);
+    const productivityScore =
+        telemetrySamples.total > 0
+            ? Math.round((telemetrySamples.moving / telemetrySamples.total) * 100)
+            : null;
 
     const radius = 55;
     const circumference = 2 * Math.PI * radius;
@@ -1585,19 +1561,11 @@ const EmployeeDashboard = () => {
 
                             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4.5 mt-4 space-y-3">
                                 <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-extrabold text-slate-600">Simulate Global OS Activity</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase">{companionSimulated ? "Active" : "Disabled"}</span>
-                                        <button 
-                                            onClick={() => setCompanionSimulated(!companionSimulated)}
-                                            className={`w-10 h-5.5 rounded-full p-0.5 transition-colors duration-300 outline-none cursor-pointer ${companionSimulated ? "bg-green-500" : "bg-slate-300"}`}
-                                        >
-                                            <div className={`bg-white w-4.5 h-4.5 rounded-full shadow-md transform transition-transform duration-300 ${companionSimulated ? "translate-x-4.5" : "translate-x-0"}`} />
-                                        </button>
-                                    </div>
+                                    <span className="text-[10px] font-extrabold text-slate-600">Desktop Companion Bypass</span>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Disabled</span>
                                 </div>
                                 <p className="text-[9px] text-slate-400 leading-relaxed font-semibold">
-                                    💡 <strong>Background Test:</strong> Keep this toggle <strong>Active</strong>. When you minimize the browser or switch to another app, the system simulated companion agent will continue capturing OS cursor activity in the background to prevent logout!
+                                    Background companion simulation is turned off. Idle, hidden-tab, and break timeouts clock you out through the backend using GPS when available.
                                 </p>
                             </div>
                         </div>
@@ -1655,7 +1623,7 @@ const EmployeeDashboard = () => {
     */
 
     return (
-        <div className="min-h-screen bg-[#f8fafc] flex relative overflow-hidden font-sans select-none">
+        <div className="min-h-screen bg-[#F8F7FF] flex relative overflow-hidden font-[Inter,sans-serif] select-none">
             {/* Background Accent Blobs */}
             <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-brand-blue opacity-[0.07] rounded-full blur-[120px] -z-10 pointer-events-none"></div>
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-peacock opacity-[0.06] rounded-full blur-[120px] -z-10 pointer-events-none"></div>
@@ -1803,7 +1771,7 @@ const EmployeeDashboard = () => {
                                         <div className="lg:col-span-4 flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-slate-100 pb-8 lg:pb-0 lg:pr-8">
                                             <div className="w-44 h-44 relative flex items-center justify-center">
                                                 <svg className="w-full h-full transform -rotate-90 select-none">
-                                                    <circle cx="88" cy="88" r={radius} stroke="#f8fafc" strokeWidth="10" fill="transparent" />
+                                                    <circle cx="88" cy="88" r={radius} stroke="#F8F7FF" strokeWidth="10" fill="transparent" />
                                                     <circle
                                                         cx="88"
                                                         cy="88"
@@ -1818,8 +1786,8 @@ const EmployeeDashboard = () => {
                                                     />
                                                     <defs>
                                                         <linearGradient id="minimalGradient" x1="1" y1="0" x2="0" y2="1">
-                                                            <stop offset="0%" stopColor="#2076C7" />
-                                                            <stop offset="100%" stopColor="#1CADA3" />
+                                                            <stop offset="0%" stopColor="#4F46E5" />
+                                                            <stop offset="100%" stopColor="#7C3AED" />
                                                         </linearGradient>
                                                     </defs>
                                                 </svg>
@@ -1864,7 +1832,7 @@ const EmployeeDashboard = () => {
                                                             <FiActivity className="text-brand-peacock" size={12} />
                                                             <span className="text-[11px] font-bold text-slate-600">Productivity:</span>
                                                         </div>
-                                                        <span className="text-[11px] font-black text-slate-800">{productivityScore}%</span>
+                                                        <span className="text-[11px] font-black text-slate-800">{productivityScore === null ? "--" : `${productivityScore}%`}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1913,7 +1881,7 @@ const EmployeeDashboard = () => {
                                                     <div className="text-right">
                                                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Shift Target Goal</p>
                                                         <p className="text-base font-extrabold text-slate-700 mt-1">
-                                                            {formatTime(30599)}
+                                                            {formatTime(targetSeconds)}
                                                         </p>
                                                     </div>
                                                 </div>

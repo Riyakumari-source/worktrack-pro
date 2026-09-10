@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiEye, FiEyeOff } from "react-icons/fi";
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+import { API_BASE_URL, DEFAULT_PUBLIC_CONFIG, fetchAppConfig, type PublicAppConfig } from "../config";
 
 const LoginPage = () => {
     const navigate = useNavigate();
@@ -11,8 +10,18 @@ const LoginPage = () => {
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [appCfg, setAppCfg] = useState<PublicAppConfig>(DEFAULT_PUBLIC_CONFIG);
+
+    useEffect(() => {
+        fetchAppConfig().then(setAppCfg);
+    }, []);
 
     const handleLogin = async () => {
+        if (!employeeId.trim() || !password) {
+            alert("Please enter your employee code and password.");
+            return;
+        }
+
         setIsLoading(true);
         try {
             const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
@@ -56,47 +65,44 @@ const LoginPage = () => {
     };
 
     return (
-        <div className="min-h-screen relative flex flex-col items-center justify-center bg-[#f8fafc] font-sans p-6 overflow-hidden">
-            {/* Blurry Pastel Fluid Blobs */}
-            <div className="absolute -bottom-24 -left-24 w-[450px] h-[450px] bg-brand-peacock opacity-12 rounded-full blur-[100px] -z-10 pointer-events-none"></div>
-            <div className="absolute top-1/3 -left-24 w-[400px] h-[400px] bg-pink-300 opacity-6 rounded-full blur-[100px] -z-10 pointer-events-none"></div>
-            <div className="absolute -top-24 -right-24 w-[500px] h-[500px] bg-brand-blue opacity-10 rounded-full blur-[110px] -z-10 pointer-events-none"></div>
+        <div className="min-h-screen relative flex flex-col items-center justify-center bg-[#F8F7FF] font-[Inter,sans-serif] p-6 overflow-hidden">
+            <div className="absolute -bottom-24 -left-24 w-[450px] h-[450px] bg-brand-peacock opacity-[0.08] rounded-full blur-[100px] -z-10 pointer-events-none"></div>
+            <div className="absolute top-1/3 -left-24 w-[400px] h-[400px] bg-violet-300 opacity-[0.06] rounded-full blur-[100px] -z-10 pointer-events-none"></div>
+            <div className="absolute -top-24 -right-24 w-[500px] h-[500px] bg-brand-blue opacity-[0.08] rounded-full blur-[110px] -z-10 pointer-events-none"></div>
 
-            {/* Header Logo & Title */}
             <div className="flex flex-col items-center mb-6">
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-1 w-16 h-16 flex items-center justify-center mb-4 transition-all duration-300 hover:shadow-md">
                     <img
                         src="/logo.png"
                         alt="Company Logo"
                         className="w-full h-full object-contain rounded-xl"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
                     />
                 </div>
                 <h1 className="text-2xl font-bold text-slate-800 tracking-tight text-center mb-1">
-                    company@demo
+                    {appCfg.companyName}
                 </h1>
                 <p className="text-xs text-slate-400 font-semibold text-center uppercase tracking-wider">
-                    Workforce Monitoring & Productivity Platform
+                    {appCfg.appSubtitle}
                 </p>
             </div>
 
-            {/* Centered White Card */}
             <div className="w-full max-w-[440px] bg-white rounded-3xl border border-slate-100/80 shadow-xl shadow-slate-200/40 p-8 sm:p-10 mb-6">
                 <div className="space-y-5">
-                    {/* Employee Code Field */}
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
                             Employee Code
                         </label>
                         <input
                             type="text"
-                            placeholder="IA00001"
+                            placeholder="Employee ID"
                             value={employeeId}
                             onChange={(e) => setEmployeeId(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
                             className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none text-slate-800 placeholder-slate-300 focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all duration-200 text-sm font-medium"
                         />
                     </div>
 
-                    {/* Password Field */}
                     <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">
                             Password
@@ -107,6 +113,7 @@ const LoginPage = () => {
                                 placeholder="Enter password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleLogin(); }}
                                 className="w-full pl-4 pr-12 py-3 rounded-xl border border-slate-200 outline-none text-slate-800 placeholder-slate-300 focus:border-brand-blue focus:ring-4 focus:ring-brand-blue/5 transition-all duration-200 text-sm font-medium"
                             />
                             <button
@@ -119,14 +126,16 @@ const LoginPage = () => {
                         </div>
                     </div>
 
-                    {/* Forgot Password */}
                     <div className="flex justify-end mt-1">
-                        <span className="text-xs font-semibold text-brand-blue hover:underline cursor-pointer transition-colors duration-200">
+                        <button
+                            type="button"
+                            onClick={() => alert("Password resets are handled by HR. Please contact HR with your employee code.")}
+                            className="text-xs font-semibold text-brand-blue hover:underline cursor-pointer transition-colors duration-200 bg-transparent border-none"
+                        >
                             Forgot Password?
-                        </span>
+                        </button>
                     </div>
 
-                    {/* Sign In Button */}
                     <button
                         onClick={handleLogin}
                         disabled={isLoading}
@@ -139,16 +148,14 @@ const LoginPage = () => {
                         )}
                     </button>
 
-                    {/* Contact HR Text */}
                     <p className="text-[11px] text-slate-400 font-medium text-center mt-4">
                         Contact HR for login credentials
                     </p>
                 </div>
             </div>
 
-            {/* Footer */}
             <div className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider text-center pointer-events-none">
-                © 2026 company@demo
+                © {new Date().getFullYear()} {appCfg.companyName}
             </div>
         </div>
     );

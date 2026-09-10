@@ -52,6 +52,7 @@ model Shift {
   endLongitude       Float?
   endAddress         String?
   endLocationFetchedAt DateTime?
+  clockOutReason     String?
 }
 
 model Break {
