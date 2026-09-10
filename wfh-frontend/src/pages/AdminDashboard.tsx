@@ -19,7 +19,11 @@ import {
     FiX,
     FiEye,
     FiCompass,
-    FiMapPin
+    FiMapPin,
+    FiTv,
+    FiMaximize2,
+    FiRefreshCw,
+    FiRadio
 } from "react-icons/fi";
 import { API_BASE_URL } from "../config";
 
@@ -37,6 +41,13 @@ interface EmployeeAuditData {
     shiftStatus?: string;
     shiftDateRaw?: string;      // YYYY-MM-DD for date grouping
     shiftDateLabel?: string;    // e.g. "Sep 8, 2026" for display
+    latestScreenshot?: {
+        id: string;
+        imageUrl: string;
+        activeWindow: string;
+        capturedAt: string;
+        status: string;
+    } | null;
     breaks: {
         shortBreaksLeft: number;
         lunchBreakUsed: boolean;
@@ -84,6 +95,10 @@ const AdminDashboard = () => {
  
     // Selected employee details modal popup
     const [detailsModalEmp, setDetailsModalEmp] = useState<EmployeeAuditData | null>(null);
+
+    // Live Screen Fullscreen Stream Viewer states
+    const [selectedLiveScreenEmp, setSelectedLiveScreenEmp] = useState<EmployeeAuditData | null>(null);
+    const [liveScreenStreamUrl, setLiveScreenStreamUrl] = useState<string | null>(null);
 
     // Zoomed screenshot for admin lightbox
     const [zoomedScreenshot, setZoomedScreenshot] = useState<string | null>(null);
@@ -265,7 +280,16 @@ const AdminDashboard = () => {
             if (res.ok) {
                 const data = await res.json();
                 if (data && data.feed) {
-                    setEmployees(data.feed);
+                    const formattedFeed = data.feed.map((emp: any) => ({
+                        ...emp,
+                        latestScreenshot: emp.latestScreenshot ? {
+                            ...emp.latestScreenshot,
+                            imageUrl: emp.latestScreenshot.imageUrl?.startsWith("/")
+                                ? `${API_BASE_URL}${emp.latestScreenshot.imageUrl}?token=${token}`
+                                : emp.latestScreenshot.imageUrl
+                        } : null
+                    }));
+                    setEmployees(formattedFeed);
                     // Automatically select the first employee from feed if none is currently selected
                     setSelectedEmpId(current => {
                         if (!current && data.feed.length > 0) {
@@ -281,6 +305,37 @@ const AdminDashboard = () => {
             setIsLoading(false);
         }
     };
+
+    // Auto-refresh single employee live screen modal every 3.5 seconds
+    useEffect(() => {
+        if (!selectedLiveScreenEmp) {
+            setLiveScreenStreamUrl(null);
+            return;
+        }
+
+        const fetchLatestFrame = async () => {
+            try {
+                const token = sessionStorage.getItem("wfh_auth_token");
+                const res = await fetch(`${API_BASE_URL}/api/admin/employee/${selectedLiveScreenEmp.employeeId}/screenshots?limit=1&skip=0`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.screenshots && data.screenshots.length > 0) {
+                        const ss = data.screenshots[0];
+                        const img = ss.imageUrl.startsWith("/") ? `${API_BASE_URL}${ss.imageUrl}?token=${token}&t=${Date.now()}` : ss.imageUrl;
+                        setLiveScreenStreamUrl(img);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to poll latest screen frame:", e);
+            }
+        };
+
+        fetchLatestFrame();
+        const pollTimer = setInterval(fetchLatestFrame, 3500);
+        return () => clearInterval(pollTimer);
+    }, [selectedLiveScreenEmp]);
 
     useEffect(() => {
         const token = sessionStorage.getItem("wfh_auth_token");
@@ -391,6 +446,7 @@ const AdminDashboard = () => {
  
     const sidebarMenuItems = [
         { name: "Overview", icon: <FiGrid size={18} /> },
+        { name: "Live Screens", icon: <FiTv size={18} />, isLive: true },
         { name: "Employees", icon: <FiUser size={18} /> },
         { name: "Shifts Log", icon: <FiCalendar size={18} /> },
         { name: "Screenshots", icon: <FiMonitor size={18} /> },
@@ -399,7 +455,7 @@ const AdminDashboard = () => {
     ];
  
     return (
-        <div className="min-h-screen bg-[#F8F7FF] flex relative overflow-hidden font-[Inter,sans-serif] select-none">
+        <div className="min-h-screen bg-[#F8FAFC] flex relative overflow-hidden font-[Inter,sans-serif] select-none">
             {/* Background Accent Blobs */}
             <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-brand-blue/5 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-peacock/4 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
@@ -436,7 +492,17 @@ const AdminDashboard = () => {
                                     <span className={`transition-transform duration-300 ${isActive ? "scale-110" : "text-slate-400"}`}>
                                         {item.icon}
                                     </span>
-                                    <span>{item.name}</span>
+                                    <div className="flex items-center justify-between flex-1">
+                                        <span>{item.name}</span>
+                                        {item.isLive && (
+                                            <span className={`flex items-center gap-1 text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                                isActive ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                            }`}>
+                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                                                LIVE
+                                            </span>
+                                        )}
+                                    </div>
                                 </button>
                             );
                         })}
@@ -1190,6 +1256,134 @@ const AdminDashboard = () => {
                         </div>
                     )}
  
+                    {/* LIVE SCREENS SURVEILLANCE TAB */}
+                    {activeMenu === "Live Screens" && (
+                        <div className="space-y-6 animate-fade-in">
+                            {/* Live Screen Header Panel */}
+                            <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="flex h-2.5 w-2.5 relative">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                                        </span>
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 bg-emerald-50 border border-emerald-100 px-3 py-1 rounded-full">
+                                            LIVE SURVEILLANCE & STREAMING
+                                        </span>
+                                    </div>
+                                    <h3 className="text-2xl font-black text-slate-800 mt-2">Team Realtime Live Screen Monitor</h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">Live desktop streams of all employees with active clocked-in WFH shifts. Click any screen to view fullscreen live stream.</p>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-emerald-50/70 border border-emerald-100 px-4 py-2 rounded-2xl flex items-center gap-2">
+                                        <FiTv className="text-emerald-600" size={16} />
+                                        <span className="text-xs font-bold text-emerald-800">
+                                            {employees.filter(e => e.isWfhActive || e.currentStatus === "Active" || e.currentStatus === "On Break").length} Employees Live
+                                        </span>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => fetchFeed()}
+                                        className="py-2.5 px-4 rounded-2xl bg-white border border-slate-200 text-slate-600 hover:text-emerald-700 hover:border-emerald-200 font-bold text-xs flex items-center gap-2 transition-all duration-300 shadow-sm cursor-pointer"
+                                        title="Refresh all streams"
+                                    >
+                                        <FiRefreshCw size={14} className={isLoading ? "animate-spin text-emerald-600" : ""} />
+                                        <span>Sync All</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Live Screens Grid */}
+                            {employees.filter(e => e.isWfhActive || e.currentStatus === "Active" || e.currentStatus === "On Break").length === 0 ? (
+                                <div className="bg-white border border-slate-100 rounded-3xl p-16 text-center space-y-4 shadow-sm">
+                                    <div className="w-16 h-16 rounded-3xl bg-slate-50 border border-slate-100 text-slate-400 mx-auto flex items-center justify-center">
+                                        <FiTv size={32} />
+                                    </div>
+                                    <h4 className="text-base font-bold text-slate-700">No Active Shift Streams Right Now</h4>
+                                    <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                        When an employee logs in and clicks "Start Shift" with screen sharing enabled, their live workstation screen will appear here automatically.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                    {employees
+                                        .filter(e => e.isWfhActive || e.currentStatus === "Active" || e.currentStatus === "On Break")
+                                        .map((emp) => {
+                                            const hasScreenshot = !!emp.latestScreenshot?.imageUrl;
+                                            return (
+                                                <div 
+                                                    key={emp.employeeId}
+                                                    onClick={() => setSelectedLiveScreenEmp(emp)}
+                                                    className="group bg-white border border-slate-200/80 rounded-3xl p-4 space-y-3 shadow-sm hover:shadow-xl hover:border-emerald-400 transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between"
+                                                >
+                                                    {/* Card Header */}
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                                                                {emp.avatar}
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <h4 className="text-xs font-bold text-slate-800 truncate leading-tight">{emp.name}</h4>
+                                                                <span className="text-[10px] font-bold text-emerald-600">{emp.employeeId}</span>
+                                                            </div>
+                                                        </div>
+
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                                            LIVE
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Screen Frame Box */}
+                                                    <div className="w-full aspect-[16/10] rounded-2xl bg-slate-900 border border-slate-100 overflow-hidden relative flex items-center justify-center group-hover:scale-[1.01] transition-transform">
+                                                        {hasScreenshot ? (
+                                                            <img 
+                                                                src={emp.latestScreenshot!.imageUrl} 
+                                                                alt={`${emp.name} Live Screen`} 
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        ) : (
+                                                            <div className="flex flex-col items-center justify-center text-slate-500 gap-2 p-4 text-center">
+                                                                <FiTv size={24} className="text-emerald-400 animate-pulse" />
+                                                                <span className="text-[10px] font-bold text-slate-400">Syncing screen stream...</span>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Active Window Pill */}
+                                                        <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
+                                                            <span className="text-[9px] font-bold bg-black/70 backdrop-blur-md text-white px-2 py-0.5 rounded-lg truncate max-w-[80%] shadow">
+                                                                {emp.latestScreenshot?.activeWindow || "Active Desktop App"}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Hover View Button Overlay */}
+                                                        <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-1.5 text-white">
+                                                            <span className="p-2.5 rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-90 group-hover:scale-100 transition-transform">
+                                                                <FiMaximize2 size={18} />
+                                                            </span>
+                                                            <span className="text-[11px] font-bold tracking-wide">Open Live View</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Card Bottom Meta */}
+                                                    <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400 font-semibold border-t border-slate-50">
+                                                        <span className="flex items-center gap-1 text-slate-600">
+                                                            <FiClock size={12} className="text-emerald-500" />
+                                                            {emp.shiftStartTime ? emp.shiftStartTime.split(" ")[0] : "Active"}
+                                                        </span>
+                                                        <span className="text-emerald-600 font-bold">
+                                                            {emp.cursorStatus === "Moving" ? "⚡ Active Moving" : "Idle"}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* SCREENSHOTS COMPLIANCE TAB */}
                     {activeMenu === "Screenshots" && (
                         <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fade-in">
@@ -1876,6 +2070,89 @@ const AdminDashboard = () => {
                         >
                             Dismiss Audit Report
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* FULLSCREEN LIVE SCREEN VIEWER MODAL */}
+            {selectedLiveScreenEmp && (
+                <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in">
+                    <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden">
+                        {/* Modal Header */}
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-sm shadow">
+                                    {selectedLiveScreenEmp.avatar}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-base font-bold text-slate-800">{selectedLiveScreenEmp.name}</h3>
+                                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                            {selectedLiveScreenEmp.employeeId}
+                                        </span>
+                                        <span className="flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                            LIVE STREAM
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                                        {selectedLiveScreenEmp.latestScreenshot?.activeWindow || "Desktop Screen Live Stream"} • Started at {selectedLiveScreenEmp.shiftStartTime || "Today"}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={() => setSelectedLiveScreenEmp(null)}
+                                className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer"
+                            >
+                                <FiX size={18} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body: Large Screen View */}
+                        <div className="flex-1 bg-slate-950 p-4 sm:p-6 flex items-center justify-center overflow-hidden min-h-[350px] sm:min-h-[500px] relative">
+                            {liveScreenStreamUrl || selectedLiveScreenEmp.latestScreenshot?.imageUrl ? (
+                                <img 
+                                    src={liveScreenStreamUrl || selectedLiveScreenEmp.latestScreenshot?.imageUrl} 
+                                    alt="Live Desktop" 
+                                    className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800"
+                                />
+                            ) : (
+                                <div className="text-center text-slate-400 space-y-3 py-20">
+                                    <FiTv size={48} className="text-emerald-400 animate-pulse mx-auto" />
+                                    <p className="text-sm font-bold">Waiting for live video screen frame from employee companion...</p>
+                                </div>
+                            )}
+
+                            {/* Floating Stream Badge */}
+                            <div className="absolute bottom-6 right-6 bg-slate-900/80 backdrop-blur-md border border-slate-700 text-slate-300 text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg pointer-events-none">
+                                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span>Auto-refreshing Live Stream (3.5s)</span>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer: Live Telemetry */}
+                        <div className="px-6 py-4 bg-white border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 text-xs">
+                            <div className="flex items-center gap-4 text-slate-600 font-medium">
+                                <span className="flex items-center gap-1.5">
+                                    <FiActivity className="text-emerald-500" size={14} />
+                                    <span>Cursor: <strong>{selectedLiveScreenEmp.cursorStatus}</strong></span>
+                                </span>
+                                {selectedLiveScreenEmp.startAddress && (
+                                    <span className="flex items-center gap-1.5 truncate max-w-xs text-slate-500">
+                                        <FiMapPin className="text-slate-400" size={14} />
+                                        <span className="truncate">{selectedLiveScreenEmp.startAddress}</span>
+                                    </span>
+                                )}
+                            </div>
+
+                            <button 
+                                onClick={() => setSelectedLiveScreenEmp(null)}
+                                className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer"
+                            >
+                                Close Live View
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -252,64 +252,127 @@ const EmployeeDashboard = () => {
         }
     };
 
-    // Helper to capture and upload a live screen capture frame
+    // Helper to capture and upload a live screen capture frame (Instant & Non-freezing)
+    const isUploadingScreenshotRef = useRef(false);
     const captureAndUploadLiveScreenshot = async () => {
+        if (isUploadingScreenshotRef.current) return;
         try {
-            // Check if we have an active live screen capture stream!
-            if (screenStreamRef.current && screenStreamRef.current.active) {
-                const video = document.createElement("video");
-                video.srcObject = screenStreamRef.current;
-                video.muted = true;
-                video.playsInline = true;
-
-                // Wait for video metadata to resolve track dimensions
-                await new Promise<void>((resolve) => {
-                    video.onloadedmetadata = () => {
-                        resolve();
-                    };
-                });
-
-                await video.play();
-
-                const canvas = document.createElement("canvas");
-                canvas.width = video.videoWidth || 1280;
-                canvas.height = video.videoHeight || 720;
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    canvas.toBlob(async (blob) => {
-                        if (!blob) return;
-                        const file = new File([blob], `screenshot-${Date.now()}.png`, { type: "image/png" });
-
-                        const token = sessionStorage.getItem("wfh_auth_token");
-                        const formData = new FormData();
-                        formData.append("screenshot", file);
-                        formData.append("activeWindow", "Desktop Screen (Captured Live)");
-
-                        const res = await fetch(`${API_BASE_URL}/api/telemetry/screenshot/upload`, {
-                            method: "POST",
-                            headers: {
-                                "Authorization": `Bearer ${token}`
-                            },
-                            body: formData
-                        });
-
-                        if (res.ok) {
-                            fetchScreenshots();
-                        }
-                    }, "image/png");
-                }
-
-                // Cleanup video source
-                video.srcObject = null;
+            if (!screenStreamRef.current || !screenStreamRef.current.active) {
                 return;
             }
 
-            console.warn("Live screen share is not active; skipping placeholder screenshot upload.");
+            const track = screenStreamRef.current.getVideoTracks()[0];
+            if (!track || track.readyState !== "live") return;
+
+            isUploadingScreenshotRef.current = true;
+            let blob: Blob | null = null;
+
+            // 1. Try native ImageCapture API (Instantaneous & Native)
+            if ("ImageCapture" in window) {
+                try {
+                    const imageCapture = new (window as any).ImageCapture(track);
+                    const bitmap = await imageCapture.grabFrame();
+                    const canvas = document.createElement("canvas");
+                    canvas.width = bitmap.width;
+                    canvas.height = bitmap.height;
+                    const ctx = canvas.getContext("2d");
+                    if (ctx) {
+                        ctx.drawImage(bitmap, 0, 0);
+                        blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png", 0.85));
+                    }
+                } catch (icErr) {
+                    console.warn("ImageCapture fallback to video canvas:", icErr);
+                }
+            }
+
+            // 2. Fallback to Video Element with guaranteed 1.2s timeout
+            if (!blob) {
+                blob = await new Promise<Blob | null>((resolve) => {
+                    const video = document.createElement("video");
+                    video.muted = true;
+                    video.playsInline = true;
+                    video.autoplay = true;
+                    video.srcObject = screenStreamRef.current;
+
+                    let done = false;
+                    const finish = (result: Blob | null) => {
+                        if (done) return;
+                        done = true;
+                        video.pause();
+                        video.srcObject = null;
+                        resolve(result);
+                    };
+
+                    const draw = () => {
+                        try {
+                            const canvas = document.createElement("canvas");
+                            canvas.width = video.videoWidth || 1280;
+                            canvas.height = video.videoHeight || 720;
+                            const ctx = canvas.getContext("2d");
+                            if (ctx) {
+                                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                                canvas.toBlob((b) => finish(b), "image/png", 0.85);
+                                return;
+                            }
+                        } catch (err) {}
+                        finish(null);
+                    };
+
+                    const safetyTimer = setTimeout(draw, 1200);
+
+                    video.onloadeddata = () => {
+                        video.play().then(() => setTimeout(draw, 100)).catch(draw);
+                    };
+                    video.play().catch(() => {});
+                });
+            }
+
+            if (!blob) {
+                isUploadingScreenshotRef.current = false;
+                return;
+            }
+
+            const file = new File([blob], `screenshot-${Date.now()}.png`, { type: "image/png" });
+            const token = sessionStorage.getItem("wfh_auth_token");
+            const formData = new FormData();
+            formData.append("screenshot", file);
+            formData.append("activeWindow", document.title || "Desktop Screen (Live Monitoring)");
+
+            const res = await fetch(`${API_BASE_URL}/api/telemetry/screenshot/upload`, {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${token}`
+                },
+                body: formData
+            });
+
+            if (res.ok) {
+                fetchScreenshots();
+            }
         } catch (err) {
             console.error("Failed to capture and upload screenshot:", err);
+        } finally {
+            isUploadingScreenshotRef.current = false;
         }
     };
+
+    // Live Screen Frame Sync (every 15s during active shift)
+    useEffect(() => {
+        if (!isClockedIn || currentStatus !== "Active") return;
+
+        const initialTimer = setTimeout(() => {
+            captureAndUploadLiveScreenshot();
+        }, 1500);
+
+        const interval = setInterval(() => {
+            captureAndUploadLiveScreenshot();
+        }, 15000);
+
+        return () => {
+            clearTimeout(initialTimer);
+            clearInterval(interval);
+        };
+    }, [isClockedIn, currentStatus]);
 
     // Helper to save task to database
     const saveTaskToDb = async (text: string) => {

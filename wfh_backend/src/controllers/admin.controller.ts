@@ -66,6 +66,17 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
             }
           }
         },
+        screenshots: {
+          orderBy: { capturedAt: "desc" },
+          take: 1,
+          select: {
+            id: true,
+            imageUrl: true,
+            activeWindow: true,
+            capturedAt: true,
+            status: true
+          }
+        },
         _count: {
           select: {
             shifts: true
@@ -99,7 +110,14 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
           activityLogs: ["No shift started today"],
           latestCoordinate: { x: 0, y: 0 },
           productivityScore: null,
-          wfhDaysCount: 0
+          wfhDaysCount: 0,
+          latestScreenshot: emp.screenshots?.[0] ? {
+            id: emp.screenshots[0].id,
+            imageUrl: emp.screenshots[0].imageUrl,
+            activeWindow: emp.screenshots[0].activeWindow,
+            capturedAt: emp.screenshots[0].capturedAt,
+            status: emp.screenshots[0].status
+          } : null
         });
         continue;
       }
@@ -269,13 +287,20 @@ export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response)
         endLongitude: shift.endLongitude,
         endAddress: shift.endAddress,
         endLocationFetchedAt: shift.endLocationFetchedAt ? new Date(shift.endLocationFetchedAt).toISOString() : null,
-        wfhDaysCount: emp._count.shifts
+        wfhDaysCount: emp._count.shifts,
+        latestScreenshot: emp.screenshots?.[0] ? {
+          id: emp.screenshots[0].id,
+          imageUrl: emp.screenshots[0].imageUrl,
+          activeWindow: emp.screenshots[0].activeWindow,
+          capturedAt: emp.screenshots[0].capturedAt,
+          status: emp.screenshots[0].status
+        } : null
       });
     }
 
     res.status(200).json({ feed });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to retrieve employees dashboard feed" });
+    res.status(500).json({ error: error.message || "Failed to retrieve employee feed" });
   }
 };
 
@@ -286,9 +311,14 @@ export const getEmployeeScreenshots = async (req: AuthenticatedRequest, res: Res
   const skip = parseInt(req.query.skip as string) || 0;
 
   try {
-    const user = await prisma.regUser.findUnique({
+    const user = await prisma.regUser.findFirst({
       where: {
-        employeeId: employeeId
+        OR: [
+          { employeeId: employeeId },
+          ...(isNaN(Number(employeeId)) ? [] : [{ id: Number(employeeId) }]),
+          ...(employeeId.startsWith("WFH") && !isNaN(Number(employeeId.replace("WFH", ""))) ? [{ id: Number(employeeId.replace("WFH", "")) }] : []),
+          ...(employeeId.startsWith("EMP-") && !isNaN(Number(employeeId.replace("EMP-", ""))) ? [{ id: Number(employeeId.replace("EMP-", "")) }] : [])
+        ]
       }
     });
 
