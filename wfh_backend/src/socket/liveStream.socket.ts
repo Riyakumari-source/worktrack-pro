@@ -37,13 +37,22 @@ export const initLiveSocket = (io: SocketIOServer) => {
       }
 
       // Employee side: send live frame
-      socket.on("live:frame", (data: { frame: string; cursor: { x: number; y: number }; activeWindow?: string }) => {
+      socket.on("live:frame", (data: { frame: string; cursor?: { x: number; y: number }; activeWindow?: string }) => {
         const employeeId = user.employeeId;
         if (!employeeId) return;
+        const payload = { 
+          employeeId, 
+          frame: data.frame, 
+          cursor: data.cursor || { x: 0, y: 0 }, 
+          activeWindow: data.activeWindow || "Desktop Workspace",
+          timestamp: Date.now() 
+        };
         const adminRoom = `admin:${employeeId}`;
-        ns.to(adminRoom).emit("live:frame", { employeeId, ...data });
+        ns.to(adminRoom).emit("live:frame", payload);
+        ns.to("admin:all").emit("live:frame", payload);
         if (ns !== io) {
-          io.to(adminRoom).emit("live:frame", { employeeId, ...data });
+          io.to(adminRoom).emit("live:frame", payload);
+          io.to("admin:all").emit("live:frame", payload);
         }
       });
 
@@ -54,8 +63,13 @@ export const initLiveSocket = (io: SocketIOServer) => {
         socket.join(room);
       });
 
+      // Admin side: watch all active employees simultaneously
+      socket.on("watch:all", () => {
+        socket.join("admin:all");
+      });
+
       socket.on("disconnect", () => {
-        // No special cleanup needed – rooms are auto-managed by Socket.io
+        // Rooms are auto-managed by Socket.io
       });
     });
   };

@@ -61,6 +61,20 @@ const formatCountdown = (totalSeconds: number) => {
 };
 
 
+const isDisplayMediaSupported = () => {
+    return typeof navigator !== "undefined" && 
+        !!navigator.mediaDevices && 
+        typeof navigator.mediaDevices.getDisplayMedia === "function";
+};
+
+const isMobileOrTabletDevice = () => {
+    if (typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(ua);
+    const isTouchMac = navigator.maxTouchPoints > 1 && /Macintosh/i.test(ua);
+    return isMobileUA || isTouchMac || !isDisplayMediaSupported();
+};
+
 const EmployeeDashboard = () => {
     const navigate = useNavigate();
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -142,6 +156,10 @@ const EmployeeDashboard = () => {
     const [screenNotification, setScreenNotification] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
     const screenStreamRef = useRef<MediaStream | null>(null);
     const [showScreenSyncModal, setShowScreenSyncModal] = useState(false);
+    const persistentLiveVideoRef = useRef<HTMLVideoElement | null>(null);
+    const persistentLiveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const isLiveStreamingFrameRef = useRef<boolean>(false);
+    const latestMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
     // ==========================================
     // CORE FEATURE 3: SMART DAILY TASK PLANNER
@@ -359,97 +377,135 @@ const EmployeeDashboard = () => {
         }
     };
 
-    // Live Screen Frame Sync (≈1 FPS live streaming during active shift)
+    // Live Screen Frame Sync (Continuous real-time live streaming at ~1 FPS)
     useEffect(() => {
-        if (!isClockedIn || currentStatus !== "Active") return;
+        if (!isClockedIn || currentStatus !== "Active") {
+            if (persistentLiveVideoRef.current) {
+                persistentLiveVideoRef.current.srcObject = null;
+            }
+            return;
+        }
+
         const socket = getSocket();
-        const captureAndEmitLiveFrame = async () => {
-            if (isUploadingScreenshotRef.current) return;
+        if (!persistentLiveCanvasRef.current) {
+            persistentLiveCanvasRef.current = document.createElement("canvas");
+        }
+        const canvas = persistentLiveCanvasRef.current;
+        const ctx = canvas.getContext("2d");
+
+        const captureAndEmitLiveFrame = () => {
+            if (isLiveStreamingFrameRef.current) return;
+            isLiveStreamingFrameRef.current = true;
+
             try {
-                if (!screenStreamRef.current || !screenStreamRef.current.active) return;
-                const track = screenStreamRef.current.getVideoTracks()[0];
-                if (!track || track.readyState !== "live") return;
-                isUploadingScreenshotRef.current = true;
-                let blob: Blob | null = null;
-                // Use existing capture logic (ImageCapture or fallback)
-                if ("ImageCapture" in window) {
-                    try {
-                        const imageCapture = new (window as any).ImageCapture(track);
-                        const bitmap = await imageCapture.grabFrame();
-                        const canvas = document.createElement("canvas");
-                        canvas.width = bitmap.width;
-                        canvas.height = bitmap.height;
-                        const ctx = canvas.getContext("2d");
-                        if (ctx) {
-                            ctx.drawImage(bitmap, 0, 0);
-                            blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png", 0.85));
-                        }
-                    } catch (icErr) {
-                        console.warn("ImageCapture fallback to video canvas:", icErr);
+                const stream = screenStreamRef.current;
+                const track = stream?.getVideoTracks()[0];
+                const hasLiveVideoTrack = track && track.readyState === "live";
+
+                if (hasLiveVideoTrack && stream) {
+                    if (!persistentLiveVideoRef.current) {
+                        const v = document.createElement("video");
+                        v.muted = true;
+                        v.playsInline = true;
+                        v.autoplay = true;
+                        persistentLiveVideoRef.current = v;
                     }
-                }
-                if (!blob) {
-                    blob = await new Promise<Blob | null>((resolve) => {
-                        const video = document.createElement("video");
-                        video.muted = true;
-                        video.playsInline = true;
-                        video.autoplay = true;
-                        video.srcObject = screenStreamRef.current;
-                        let done = false;
-                        const finish = (result: Blob | null) => {
-                            if (done) return;
-                            done = true;
-                            video.pause();
-                            video.srcObject = null;
-                            resolve(result);
-                        };
-                        const draw = () => {
-                            try {
-                                const canvas = document.createElement("canvas");
-                                canvas.width = video.videoWidth || 1280;
-                                canvas.height = video.videoHeight || 720;
-                                const ctx = canvas.getContext("2d");
-                                if (ctx) {
-                                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                                    canvas.toBlob((b) => finish(b), "image/png", 0.85);
-                                    return;
-                                }
-                            } catch (err) { }
-                            finish(null);
-                        };
-                        const safetyTimer = setTimeout(draw, 1200);
-                        video.onloadeddata = () => {
-                            video.play().then(() => setTimeout(draw, 100)).catch(draw);
-                        };
-                        video.play().catch(() => { });
+
+                    const video = persistentLiveVideoRef.current;
+                    if (video.srcObject !== stream) {
+                        video.srcObject = stream;
+                        video.play().catch(() => {});
+                    }
+
+                    if (video.readyState >= 2 && ctx) {
+                        const targetWidth = Math.min(video.videoWidth || 1280, 1280);
+                        const targetHeight = Math.min(video.videoHeight || 720, 720);
+                        canvas.width = targetWidth;
+                        canvas.height = targetHeight;
+                        ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+                        const frameData = canvas.toDataURL("image/jpeg", 0.62);
+                        socket.emit("live:frame", {
+                            frame: frameData,
+                            cursor: latestMousePosRef.current,
+                            activeWindow: document.title || "Active Workspace (Live Stream)"
+                        });
+                    }
+                } else if (ctx) {
+                    // Mobile or non-desktop device fallback: Generate real-time telemetry card
+                    canvas.width = 960;
+                    canvas.height = 540;
+
+                    // Sleek dark glassmorphism gradient
+                    const gradient = ctx.createLinearGradient(0, 0, 960, 540);
+                    gradient.addColorStop(0, "#0F172A");
+                    gradient.addColorStop(0.5, "#1E293B");
+                    gradient.addColorStop(1, "#0A0F1D");
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, 960, 540);
+
+                    // Glowing green border
+                    ctx.strokeStyle = "#10B981";
+                    ctx.lineWidth = 4;
+                    ctx.strokeRect(16, 16, 928, 508);
+
+                    // Header badge
+                    ctx.fillStyle = "#10B981";
+                    ctx.font = "bold 20px Inter, sans-serif";
+                    ctx.fillText("● MOBILE WFH TELEMETRY STREAM (LIVE)", 48, 68);
+
+                    // Clock & Time
+                    const nowStr = new Date().toLocaleTimeString("en-US", { hour12: true, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.font = "bold 56px Inter, sans-serif";
+                    ctx.fillText(nowStr, 48, 150);
+
+                    // Employee info
+                    const empName = sessionStorage.getItem("wfh_user_name") || "Active Employee";
+                    const empId = sessionStorage.getItem("wfh_logged_in_user") || "EMP";
+                    ctx.fillStyle = "#94A3B8";
+                    ctx.font = "bold 24px Inter, sans-serif";
+                    ctx.fillText(`Employee: ${empName} (${empId})`, 48, 220);
+
+                    // Status pill
+                    ctx.fillStyle = "#059669";
+                    ctx.fillRect(48, 255, 180, 42);
+                    ctx.fillStyle = "#FFFFFF";
+                    ctx.font = "bold 18px Inter, sans-serif";
+                    ctx.fillText("STATUS: ACTIVE", 68, 283);
+
+                    // Location info text
+                    ctx.fillStyle = "#64748B";
+                    ctx.font = "16px Inter, sans-serif";
+                    ctx.fillText(`📍 Working Location: ${shiftLocation || "Customer Site"}`, 48, 350);
+
+                    // Footer notice
+                    ctx.fillStyle = "#475569";
+                    ctx.font = "italic 16px Inter, sans-serif";
+                    ctx.fillText("Mobile OS Session — Screen capture simulated via telemetry heartbeat", 48, 480);
+
+                    const frameData = canvas.toDataURL("image/jpeg", 0.65);
+                    socket.emit("live:frame", {
+                        frame: frameData,
+                        cursor: { x: 0, y: 0 },
+                        activeWindow: "Mobile Device WFH Session (Live)"
                     });
                 }
-                if (!blob) return;
-                const dataUrl = await new Promise<string>((res) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => res(reader.result as string);
-                    reader.readAsDataURL(blob as Blob);
-                });
-                // Emit via socket.io
-                socket.emit("live:frame", {
-                    frame: dataUrl,
-                    cursor: { x: 0, y: 0 }, // TODO: replace with actual cursor tracking if needed
-                    activeWindow: document.title || "Desktop Screen (Live Monitoring)"
-                });
             } catch (err) {
-                console.error("Failed to capture and emit live frame:", err);
+                console.error("Live frame capture error:", err);
             } finally {
-                isUploadingScreenshotRef.current = false;
+                isLiveStreamingFrameRef.current = false;
             }
         };
-        // Initial short delay then start 1 FPS interval
-        const initialTimer = setTimeout(captureAndEmitLiveFrame, 1500);
+
         const interval = setInterval(captureAndEmitLiveFrame, 1000);
+        const initTimer = setTimeout(captureAndEmitLiveFrame, 800);
+
         return () => {
-            clearTimeout(initialTimer);
             clearInterval(interval);
+            clearTimeout(initTimer);
         };
-    }, [isClockedIn, currentStatus]);
+    }, [isClockedIn, currentStatus, shiftLocation]);
 
     // Helper to save task to database
     const saveTaskToDb = async (text: string) => {
@@ -686,6 +742,7 @@ const EmployeeDashboard = () => {
 
         const handleMouseMove = (e: MouseEvent) => {
             setCursorPos({ x: e.clientX, y: e.clientY });
+            latestMousePosRef.current = { x: e.clientX, y: e.clientY };
             resetIdle();
             
             if (Math.random() < 0.03) {
@@ -992,6 +1049,12 @@ const EmployeeDashboard = () => {
             return;
         }
 
+        // Mobile devices & browsers without screen share support should NEVER be blocked by screen sync modal
+        if (isMobileOrTabletDevice() || !isDisplayMediaSupported()) {
+            setShowScreenSyncModal(false);
+            return;
+        }
+
         const checkStream = () => {
             const hasActiveStream = screenStreamRef.current && screenStreamRef.current.active;
             if (!hasActiveStream) {
@@ -1007,6 +1070,10 @@ const EmployeeDashboard = () => {
     }, [isClockedIn]);
 
     const handleReSyncScreen = async () => {
+        if (isMobileOrTabletDevice() || !isDisplayMediaSupported()) {
+            setShowScreenSyncModal(false);
+            return;
+        }
         try {
             const stream = await getScreenStream();
             screenStreamRef.current = stream;
@@ -1022,6 +1089,9 @@ const EmployeeDashboard = () => {
     };
 
     const getScreenStream = async (): Promise<MediaStream> => {
+        if (!isDisplayMediaSupported()) {
+            throw new Error("Screen sharing is not supported on this device/browser.");
+        }
         return await navigator.mediaDevices.getDisplayMedia({
             video: {
                 displaySurface: "monitor"
@@ -1086,23 +1156,40 @@ const EmployeeDashboard = () => {
                 return; // Strictly block clock-in
             }
 
-            // Request Screen Sharing stream permission strictly!
-            setLocationStatusText("Waiting for Screen Share Telemetry Permission...");
-            try {
-                const screenStream = await getScreenStream();
-                screenStreamRef.current = screenStream;
+            // Request Screen Sharing on desktop devices, or activate mobile mode
+            const isMobile = isMobileOrTabletDevice();
+            if (isMobile || !isDisplayMediaSupported()) {
+                setLocationStatusText("Mobile device detected: Initializing Mobile WFH session...");
+                // Attempt optional front-camera telemetry if supported
+                if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+                    try {
+                        const camStream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+                            audio: false
+                        });
+                        screenStreamRef.current = camStream;
+                    } catch (camErr) {
+                        console.warn("Mobile camera optional stream skipped:", camErr);
+                    }
+                }
+            } else {
+                setLocationStatusText("Waiting for Screen Share Telemetry Permission...");
+                try {
+                    const screenStream = await getScreenStream();
+                    screenStreamRef.current = screenStream;
 
-                // Watch for when the user stops sharing screen from the browser bar!
-                screenStream.getVideoTracks()[0].onended = () => {
-                    alert("⚠️ Compliance Alert: Screen sharing was stopped! Ending WFH Shift.");
-                    handleForceClockOut();
-                };
-            } catch (screenErr: any) {
-                console.error("Screen stream permission denied:", screenErr);
-                alert("❌ Shift Start Blocked: You must enable Screen Sharing (select Entire Screen) to start your WFH shift compliance monitoring.");
-                setIsClockingIn(false);
-                setLocationStatusText(null);
-                return; // Block clock-in!
+                    // Watch for when the user stops sharing screen from the browser bar!
+                    screenStream.getVideoTracks()[0].onended = () => {
+                        alert("⚠️ Compliance Alert: Screen sharing was stopped! Ending WFH Shift.");
+                        handleForceClockOut();
+                    };
+                } catch (screenErr: any) {
+                    console.error("Screen stream permission denied:", screenErr);
+                    alert("❌ Shift Start Blocked: You must enable Screen Sharing (select Entire Screen) to start your WFH shift compliance monitoring.");
+                    setIsClockingIn(false);
+                    setLocationStatusText(null);
+                    return; // Block clock-in on desktop if denied
+                }
             }
 
             setLocationStatusText("Syncing Telemetry with Remote Server...");
@@ -1136,8 +1223,9 @@ const EmployeeDashboard = () => {
                 setCurrentStatus("Active");
                 setWorkTime(0);
                 
-                const now = new Date();
-                setClockInTime(now.toLocaleTimeString("en-US", { hour12: true }));
+                // Actual real-time timestamp when shift started
+                const actualStart = data.shift?.shiftStartTime ? new Date(data.shift.shiftStartTime) : new Date();
+                setClockInTime(actualStart.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }));
                 lastActiveTimeRef.current = Date.now();
                 setIdleTime(0);
                 setTaskAssignTime(appCfg.taskAssignSeconds);

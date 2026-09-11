@@ -109,6 +109,8 @@ const AdminDashboard = () => {
     // Live Screen Fullscreen Stream Viewer states
     const [selectedLiveScreenEmp, setSelectedLiveScreenEmp] = useState<EmployeeAuditData | null>(null);
     const [liveScreenStreamUrl, setLiveScreenStreamUrl] = useState<string | null>(null);
+    const [liveFrames, setLiveFrames] = useState<Record<string, { frame: string; activeWindow?: string; cursor?: { x: number; y: number }; timestamp: number }>>({});
+    const [isModalFullscreen, setIsModalFullscreen] = useState(false);
 
     // Zoomed screenshot for admin lightbox
     const [zoomedScreenshot, setZoomedScreenshot] = useState<string | null>(null);
@@ -345,6 +347,50 @@ const AdminDashboard = () => {
         fetchLatestFrame();
         const pollTimer = setInterval(fetchLatestFrame, 3500);
         return () => clearInterval(pollTimer);
+    }, [selectedLiveScreenEmp]);
+
+    // Real-time live screen socket subscription for all active employees simultaneously
+    useEffect(() => {
+        const token = sessionStorage.getItem("wfh_auth_token");
+        const role = sessionStorage.getItem("wfh_user_role");
+        if (!token || role?.toUpperCase() !== "ADMIN") return;
+
+        const socket = getSocket();
+        socket.emit("watch:all");
+
+        const handleLiveFrame = (data: { employeeId: string; frame: string; cursor?: { x: number; y: number }; activeWindow?: string; timestamp?: number }) => {
+            if (!data.employeeId || !data.frame) return;
+            setLiveFrames((prev) => ({
+                ...prev,
+                [data.employeeId]: {
+                    frame: data.frame,
+                    activeWindow: data.activeWindow,
+                    cursor: data.cursor,
+                    timestamp: data.timestamp || Date.now()
+                }
+            }));
+        };
+
+        socket.on("live:frame", handleLiveFrame);
+
+        // Keep watch:all room active on reconnects
+        const pingInterval = setInterval(() => {
+            if (socket.connected) {
+                socket.emit("watch:all");
+            }
+        }, 8000);
+
+        return () => {
+            socket.off("live:frame", handleLiveFrame);
+            clearInterval(pingInterval);
+        };
+    }, []);
+
+    // Watch specific employee when modal opens
+    useEffect(() => {
+        if (!selectedLiveScreenEmp) return;
+        const socket = getSocket();
+        socket.emit("watch:employee", selectedLiveScreenEmp.employeeId);
     }, [selectedLiveScreenEmp]);
 
     useEffect(() => {
@@ -1446,7 +1492,10 @@ const AdminDashboard = () => {
                                     {employees
                                         .filter(e => e.isWfhActive || e.currentStatus === "Active" || e.currentStatus === "On Break")
                                         .map((emp) => {
-                                            const hasScreenshot = !!emp.latestScreenshot?.imageUrl;
+                                            const liveData = liveFrames[emp.employeeId];
+                                            const isStreaming = liveData && (Date.now() - liveData.timestamp < 12000);
+                                            const displayImage = (isStreaming && liveData?.frame) || emp.latestScreenshot?.imageUrl;
+                                            const activeWinTitle = (isStreaming && liveData?.activeWindow) || emp.latestScreenshot?.activeWindow || "Active Workspace";
                                             return (
                                                 <div 
                                                     key={emp.employeeId}
@@ -1465,19 +1514,26 @@ const AdminDashboard = () => {
                                                             </div>
                                                         </div>
 
-                                                        <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
-                                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                                                            LIVE
-                                                        </span>
+                                                        {isStreaming ? (
+                                                            <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500 text-white shadow-sm shrink-0">
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping"></span>
+                                                                LIVE STREAM
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 shrink-0">
+                                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                                                LIVE
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     {/* Screen Frame Box */}
                                                     <div className="w-full aspect-[16/10] rounded-2xl bg-slate-900 border border-slate-100 overflow-hidden relative flex items-center justify-center group-hover:scale-[1.01] transition-transform">
-                                                        {hasScreenshot ? (
+                                                        {displayImage ? (
                                                             <img 
-                                                                src={emp.latestScreenshot!.imageUrl} 
+                                                                src={displayImage} 
                                                                 alt={`${mapName(emp.name)} Live Screen`} 
-                                                                className="w-full h-full object-cover"
+                                                                className="w-full h-full object-cover transition-opacity duration-200"
                                                             />
                                                         ) : (
                                                             <div className="flex flex-col items-center justify-center text-slate-500 gap-2 p-4 text-center">
@@ -1489,7 +1545,7 @@ const AdminDashboard = () => {
                                                         {/* Active Window Pill */}
                                                         <div className="absolute top-2 left-2 right-2 flex items-center justify-between pointer-events-none">
                                                             <span className="text-[9px] font-bold bg-black/70 backdrop-blur-md text-white px-2 py-0.5 rounded-lg truncate max-w-[80%] shadow">
-                                                                {emp.latestScreenshot?.activeWindow || "Active Desktop App"}
+                                                                {activeWinTitle}
                                                             </span>
                                                         </div>
 
@@ -1498,18 +1554,18 @@ const AdminDashboard = () => {
                                                             <span className="p-2.5 rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 scale-90 group-hover:scale-100 transition-transform">
                                                                 <FiMaximize2 size={18} />
                                                             </span>
-                                                            <span className="text-[11px] font-bold tracking-wide">Open Live View</span>
+                                                            <span className="text-[11px] font-bold tracking-wide">Open Fullscreen Live</span>
                                                         </div>
                                                     </div>
 
                                                     {/* Card Bottom Meta */}
                                                     <div className="pt-1 flex items-center justify-between text-[10px] text-slate-400 font-semibold border-t border-slate-50">
-                                                        <span className="flex items-center gap-1 text-slate-600">
+                                                        <span className="flex items-center gap-1 text-slate-600 font-semibold">
                                                             <FiClock size={12} className="text-emerald-500" />
                                                             {formatShiftTime(emp.shiftStartTimeRaw, emp.shiftStartTime)}
                                                         </span>
                                                         <span className="text-emerald-600 font-bold">
-                                                            {emp.cursorStatus === "Moving" ? "⚡ Active Moving" : "Idle"}
+                                                            {isStreaming ? "⚡ Real-time (1 FPS)" : (emp.cursorStatus === "Moving" ? "Active Moving" : "Idle")}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -2220,94 +2276,122 @@ const AdminDashboard = () => {
             )}
 
             {/* FULLSCREEN LIVE SCREEN VIEWER MODAL */}
-            {selectedLiveScreenEmp && (
-                <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-fade-in">
-                    <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden">
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-sm shadow">
-                                    {selectedLiveScreenEmp.avatar}
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2">
-                                        <h3 className="text-base font-bold text-slate-800">{selectedLiveScreenEmp.name}</h3>
-                                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                            {selectedLiveScreenEmp.employeeId}
-                                        </span>
-                                        <span className="flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                                            LIVE STREAM
-                                        </span>
+            {selectedLiveScreenEmp && (() => {
+                const modalLiveData = liveFrames[selectedLiveScreenEmp.employeeId];
+                const modalIsStreaming = modalLiveData && (Date.now() - modalLiveData.timestamp < 12000);
+                const modalImage = (modalIsStreaming && modalLiveData?.frame) || liveScreenStreamUrl || selectedLiveScreenEmp.latestScreenshot?.imageUrl;
+                const modalActiveWindow = (modalIsStreaming && modalLiveData?.activeWindow) || selectedLiveScreenEmp.latestScreenshot?.activeWindow || "Active Desktop Workspace";
+
+                return (
+                    <div className={`fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-2 sm:p-6 animate-fade-in ${isModalFullscreen ? "p-0" : ""}`}>
+                        <div className={`bg-white border border-slate-200 shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ${isModalFullscreen ? "w-screen h-screen max-w-none max-h-none rounded-none" : "rounded-3xl max-w-5xl w-full max-h-[95vh]"}`}>
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-sm shadow shrink-0">
+                                        {selectedLiveScreenEmp.avatar}
                                     </div>
-                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
-                                        {selectedLiveScreenEmp.latestScreenshot?.activeWindow || "Desktop Screen Live Stream"} • Started at {selectedLiveScreenEmp.shiftStartTime || "Today"}
-                                    </p>
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-base font-bold text-slate-800">{mapName(selectedLiveScreenEmp.name)}</h3>
+                                            <span className="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                {selectedLiveScreenEmp.employeeId}
+                                            </span>
+                                            {modalIsStreaming ? (
+                                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                                    LIVE STREAM (1s)
+                                                </span>
+                                            ) : (
+                                                <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
+                                                    STANDBY
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">
+                                            {modalActiveWindow} • Shift started at: {formatShiftTime(selectedLiveScreenEmp.shiftStartTimeRaw, selectedLiveScreenEmp.shiftStartTime)}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button 
+                                        onClick={() => setIsModalFullscreen(!isModalFullscreen)}
+                                        title={isModalFullscreen ? "Exit Fullscreen" : "Fullscreen View"}
+                                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900 flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                    >
+                                        <FiMaximize2 size={14} />
+                                        <span className="hidden sm:inline">{isModalFullscreen ? "Exit Fullscreen" : "Fullscreen"}</span>
+                                    </button>
+
+                                    <button 
+                                        onClick={() => {
+                                            setSelectedLiveScreenEmp(null);
+                                            setIsModalFullscreen(false);
+                                        }}
+                                        className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer shadow-sm"
+                                    >
+                                        <FiX size={18} />
+                                    </button>
                                 </div>
                             </div>
 
-                            <button 
-                                onClick={() => setSelectedLiveScreenEmp(null)}
-                                className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer"
-                            >
-                                <FiX size={18} />
-                                {/* Live Screen Fullscreen Stream Viewer */}
-                                {selectedLiveScreenEmp && (
-                                    <LiveScreenModal
-                                        employeeId={selectedLiveScreenEmp.employeeId}
-                                        onClose={() => setSelectedLiveScreenEmp(null)}
-                                    />
+                            {/* Modal Body: Large Screen View */}
+                            <div className="flex-1 bg-slate-950 p-4 sm:p-6 flex items-center justify-center overflow-hidden min-h-[350px] sm:min-h-[500px] relative">
+                                {modalImage ? (
+                                    <div className="relative flex items-center justify-center w-full h-full">
+                                        <img 
+                                            src={modalImage} 
+                                            alt="Live Desktop" 
+                                            className={`${isModalFullscreen ? "max-h-[85vh]" : "max-h-[70vh]"} w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800 transition-all duration-150`}
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-slate-400 space-y-3 py-20">
+                                        <FiTv size={48} className="text-emerald-400 animate-pulse mx-auto" />
+                                        <p className="text-sm font-bold">Waiting for live video screen frame from employee companion...</p>
+                                    </div>
                                 )}
-                            </button>
-                        </div>
 
-                        {/* Modal Body: Large Screen View */}
-                        <div className="flex-1 bg-slate-950 p-4 sm:p-6 flex items-center justify-center overflow-hidden min-h-[350px] sm:min-h-[500px] relative">
-                            {liveScreenStreamUrl || selectedLiveScreenEmp.latestScreenshot?.imageUrl ? (
-                                <img 
-                                    src={liveScreenStreamUrl || selectedLiveScreenEmp.latestScreenshot?.imageUrl} 
-                                    alt="Live Desktop" 
-                                    className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800"
-                                />
-                            ) : (
-                                <div className="text-center text-slate-400 space-y-3 py-20">
-                                    <FiTv size={48} className="text-emerald-400 animate-pulse mx-auto" />
-                                    <p className="text-sm font-bold">Waiting for live video screen frame from employee companion...</p>
+                                {/* Floating Stream Badge */}
+                                <div className="absolute bottom-6 right-6 bg-slate-900/85 backdrop-blur-md border border-slate-700 text-slate-300 text-[10px] font-bold px-3.5 py-1.5 rounded-full flex items-center gap-2 shadow-lg pointer-events-none">
+                                    <span className={`h-2 w-2 rounded-full ${modalIsStreaming ? "bg-emerald-400 animate-ping" : "bg-amber-400"}`}></span>
+                                    <span>{modalIsStreaming ? "WebSocket Live Stream (≈1 FPS)" : "Latest Screen Snapshot"}</span>
                                 </div>
-                            )}
-
-                            {/* Floating Stream Badge */}
-                            <div className="absolute bottom-6 right-6 bg-slate-900/80 backdrop-blur-md border border-slate-700 text-slate-300 text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-2 shadow-lg pointer-events-none">
-                                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                                <span>Auto-refreshing Live Stream (3.5s)</span>
                             </div>
-                        </div>
 
-                        {/* Modal Footer: Live Telemetry */}
-                        <div className="px-6 py-4 bg-white border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 text-xs">
-                            <div className="flex items-center gap-4 text-slate-600 font-medium">
-                                <span className="flex items-center gap-1.5">
-                                    <FiActivity className="text-emerald-500" size={14} />
-                                    <span>Cursor: <strong>{selectedLiveScreenEmp.cursorStatus}</strong></span>
-                                </span>
-                                {selectedLiveScreenEmp.startAddress && (
-                                    <span className="flex items-center gap-1.5 truncate max-w-xs text-slate-500">
-                                        <FiMapPin className="text-slate-400" size={14} />
-                                        <span className="truncate">{selectedLiveScreenEmp.startAddress}</span>
+                            {/* Modal Footer: Live Telemetry */}
+                            <div className="px-6 py-4 bg-white border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 text-xs">
+                                <div className="flex items-center gap-4 text-slate-600 font-medium">
+                                    <span className="flex items-center gap-1.5">
+                                        <FiActivity className="text-emerald-500" size={14} />
+                                        <span>Status: <strong className="text-emerald-600">{selectedLiveScreenEmp.currentStatus || "Active"}</strong></span>
                                     </span>
-                                )}
-                            </div>
+                                    <span className="flex items-center gap-1.5">
+                                        <span>Cursor Activity: <strong>{selectedLiveScreenEmp.cursorStatus}</strong></span>
+                                    </span>
+                                    {selectedLiveScreenEmp.startAddress && (
+                                        <span className="flex items-center gap-1.5 truncate max-w-xs text-slate-500">
+                                            <FiMapPin className="text-slate-400" size={14} />
+                                            <span className="truncate">{selectedLiveScreenEmp.startAddress}</span>
+                                        </span>
+                                    )}
+                                </div>
 
-                            <button 
-                                onClick={() => setSelectedLiveScreenEmp(null)}
-                                className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer"
-                            >
-                                Close Live View
-                            </button>
+                                <button 
+                                    onClick={() => {
+                                        setSelectedLiveScreenEmp(null);
+                                        setIsModalFullscreen(false);
+                                    }}
+                                    className="px-5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all cursor-pointer"
+                                >
+                                    Close Live View
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Lightbox Zoom Modal Overlay */}
             {zoomedScreenshot && (
