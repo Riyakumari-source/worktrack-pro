@@ -67,12 +67,46 @@ const isDisplayMediaSupported = () => {
         typeof navigator.mediaDevices.getDisplayMedia === "function";
 };
 
-const isMobileOrTabletDevice = () => {
-    if (typeof navigator === "undefined") return false;
-    const ua = navigator.userAgent || "";
-    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(ua);
-    const isTouchMac = navigator.maxTouchPoints > 1 && /Macintosh/i.test(ua);
-    return isMobileUA || isTouchMac || !isDisplayMediaSupported();
+const isMobileOrTouchDevice = () => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+
+    // 1. Chromium Client Hints (Android Chrome reports mobile: true even in Desktop Site mode!)
+    if ((navigator as any).userAgentData?.mobile === true) {
+        return true;
+    }
+
+    const ua = navigator.userAgent || navigator.vendor || (window as any).opera || "";
+    // 2. Standard Mobile User Agent regex
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|Silk/i.test(ua)) {
+        return true;
+    }
+
+    // 3. iPad / iOS tablet spoofing Macintosh Desktop
+    if (navigator.maxTouchPoints > 1 && /Macintosh/i.test(ua)) {
+        return true;
+    }
+
+    // 4. Mobile browsers do NOT support getDisplayMedia (even in Desktop Site mode)
+    const hasDisplayMedia = !!navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function";
+    if (!hasDisplayMedia) {
+        return true;
+    }
+
+    // 5. Coarse touch pointer & multi-touch screen check
+    const hasTouch = (navigator.maxTouchPoints && navigator.maxTouchPoints > 1) || "ontouchstart" in window;
+    const isCoarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    const isFine = window.matchMedia && window.matchMedia("(pointer: fine)").matches;
+    if (hasTouch && isCoarse && !isFine) {
+        return true;
+    }
+
+    // 6. Mobile screen dimensions with touch
+    const minDim = Math.min(window.screen?.width || window.innerWidth, window.screen?.height || window.innerHeight);
+    if (minDim < 640 && hasTouch) {
+        return true;
+    }
+
+    return false;
 };
 
 const EmployeeDashboard = () => {
@@ -160,6 +194,17 @@ const EmployeeDashboard = () => {
     const persistentLiveCanvasRef = useRef<HTMLCanvasElement | null>(null);
     const isLiveStreamingFrameRef = useRef<boolean>(false);
     const latestMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [isMobileDevice, setIsMobileDevice] = useState(false);
+    const [showMobileBlockModal, setShowMobileBlockModal] = useState(false);
+
+    useEffect(() => {
+        const updateDevice = () => {
+            setIsMobileDevice(isMobileOrTouchDevice());
+        };
+        updateDevice();
+        window.addEventListener("resize", updateDevice);
+        return () => window.removeEventListener("resize", updateDevice);
+    }, []);
 
     // ==========================================
     // CORE FEATURE 3: SMART DAILY TASK PLANNER
@@ -431,65 +476,6 @@ const EmployeeDashboard = () => {
                             activeWindow: document.title || "Active Workspace (Live Stream)"
                         });
                     }
-                } else if (ctx) {
-                    // Mobile or non-desktop device fallback: Generate real-time telemetry card
-                    canvas.width = 960;
-                    canvas.height = 540;
-
-                    // Sleek dark glassmorphism gradient
-                    const gradient = ctx.createLinearGradient(0, 0, 960, 540);
-                    gradient.addColorStop(0, "#0F172A");
-                    gradient.addColorStop(0.5, "#1E293B");
-                    gradient.addColorStop(1, "#0A0F1D");
-                    ctx.fillStyle = gradient;
-                    ctx.fillRect(0, 0, 960, 540);
-
-                    // Glowing green border
-                    ctx.strokeStyle = "#10B981";
-                    ctx.lineWidth = 4;
-                    ctx.strokeRect(16, 16, 928, 508);
-
-                    // Header badge
-                    ctx.fillStyle = "#10B981";
-                    ctx.font = "bold 20px Inter, sans-serif";
-                    ctx.fillText("● MOBILE WFH TELEMETRY STREAM (LIVE)", 48, 68);
-
-                    // Clock & Time
-                    const nowStr = new Date().toLocaleTimeString("en-US", { hour12: true, hour: "2-digit", minute: "2-digit", second: "2-digit" });
-                    ctx.fillStyle = "#FFFFFF";
-                    ctx.font = "bold 56px Inter, sans-serif";
-                    ctx.fillText(nowStr, 48, 150);
-
-                    // Employee info
-                    const empName = sessionStorage.getItem("wfh_user_name") || "Active Employee";
-                    const empId = sessionStorage.getItem("wfh_logged_in_user") || "EMP";
-                    ctx.fillStyle = "#94A3B8";
-                    ctx.font = "bold 24px Inter, sans-serif";
-                    ctx.fillText(`Employee: ${empName} (${empId})`, 48, 220);
-
-                    // Status pill
-                    ctx.fillStyle = "#059669";
-                    ctx.fillRect(48, 255, 180, 42);
-                    ctx.fillStyle = "#FFFFFF";
-                    ctx.font = "bold 18px Inter, sans-serif";
-                    ctx.fillText("STATUS: ACTIVE", 68, 283);
-
-                    // Location info text
-                    ctx.fillStyle = "#64748B";
-                    ctx.font = "16px Inter, sans-serif";
-                    ctx.fillText(`📍 Working Location: ${shiftLocation || "Customer Site"}`, 48, 350);
-
-                    // Footer notice
-                    ctx.fillStyle = "#475569";
-                    ctx.font = "italic 16px Inter, sans-serif";
-                    ctx.fillText("Mobile OS Session — Screen capture simulated via telemetry heartbeat", 48, 480);
-
-                    const frameData = canvas.toDataURL("image/jpeg", 0.65);
-                    socket.emit("live:frame", {
-                        frame: frameData,
-                        cursor: { x: 0, y: 0 },
-                        activeWindow: "Mobile Device WFH Session (Live)"
-                    });
                 }
             } catch (err) {
                 console.error("Live frame capture error:", err);
@@ -635,6 +621,20 @@ const EmployeeDashboard = () => {
         };
 
         recoverActiveShift();
+
+        // Multi-device sync: Periodically sync shift status every 8 seconds
+        const syncInterval = setInterval(recoverActiveShift, 8000);
+
+        // Immediate sync whenever user switches to this tab or window
+        const onSyncFocus = () => recoverActiveShift();
+        window.addEventListener("focus", onSyncFocus);
+        document.addEventListener("visibilitychange", onSyncFocus);
+
+        return () => {
+            clearInterval(syncInterval);
+            window.removeEventListener("focus", onSyncFocus);
+            document.removeEventListener("visibilitychange", onSyncFocus);
+        };
     }, [navigate]);
 
     // Mount hooks to fetch System IP and historical WFH shifts
@@ -1049,8 +1049,8 @@ const EmployeeDashboard = () => {
             return;
         }
 
-        // Mobile devices & browsers without screen share support should NEVER be blocked by screen sync modal
-        if (isMobileOrTabletDevice() || !isDisplayMediaSupported()) {
+        // Mobile devices or secondary devices where screen share is on desktop should never be blocked by sync modal
+        if (isMobileOrTouchDevice() || !isDisplayMediaSupported()) {
             setShowScreenSyncModal(false);
             return;
         }
@@ -1070,7 +1070,7 @@ const EmployeeDashboard = () => {
     }, [isClockedIn]);
 
     const handleReSyncScreen = async () => {
-        if (isMobileOrTabletDevice() || !isDisplayMediaSupported()) {
+        if (isMobileOrTouchDevice() || !isDisplayMediaSupported()) {
             setShowScreenSyncModal(false);
             return;
         }
@@ -1123,6 +1123,12 @@ const EmployeeDashboard = () => {
     const handleClockInToggle = async () => {
         const token = sessionStorage.getItem("wfh_auth_token");
         if (!isClockedIn) {
+            // Strict compliance: Block any mobile / non-desktop shift initiation
+            if (isMobileOrTouchDevice()) {
+                setShowMobileBlockModal(true);
+                return;
+            }
+
             if (completedToday) {
                 alert("❌ Lockout Compliance Block: You have already completed or logged out of your WFH shift today. Re-starting a shift is strictly disabled for the rest of today.");
                 return;
@@ -1156,40 +1162,23 @@ const EmployeeDashboard = () => {
                 return; // Strictly block clock-in
             }
 
-            // Request Screen Sharing on desktop devices, or activate mobile mode
-            const isMobile = isMobileOrTabletDevice();
-            if (isMobile || !isDisplayMediaSupported()) {
-                setLocationStatusText("Mobile device detected: Initializing Mobile WFH session...");
-                // Attempt optional front-camera telemetry if supported
-                if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
-                    try {
-                        const camStream = await navigator.mediaDevices.getUserMedia({
-                            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-                            audio: false
-                        });
-                        screenStreamRef.current = camStream;
-                    } catch (camErr) {
-                        console.warn("Mobile camera optional stream skipped:", camErr);
-                    }
-                }
-            } else {
-                setLocationStatusText("Waiting for Screen Share Telemetry Permission...");
-                try {
-                    const screenStream = await getScreenStream();
-                    screenStreamRef.current = screenStream;
+            // Desktop screen sharing strictly required
+            setLocationStatusText("Waiting for Screen Share Telemetry Permission...");
+            try {
+                const screenStream = await getScreenStream();
+                screenStreamRef.current = screenStream;
 
-                    // Watch for when the user stops sharing screen from the browser bar!
-                    screenStream.getVideoTracks()[0].onended = () => {
-                        alert("⚠️ Compliance Alert: Screen sharing was stopped! Ending WFH Shift.");
-                        handleForceClockOut();
-                    };
-                } catch (screenErr: any) {
-                    console.error("Screen stream permission denied:", screenErr);
-                    alert("❌ Shift Start Blocked: You must enable Screen Sharing (select Entire Screen) to start your WFH shift compliance monitoring.");
-                    setIsClockingIn(false);
-                    setLocationStatusText(null);
-                    return; // Block clock-in on desktop if denied
-                }
+                // Watch for when the user stops sharing screen from the browser bar!
+                screenStream.getVideoTracks()[0].onended = () => {
+                    alert("⚠️ Compliance Alert: Screen sharing was stopped! Ending WFH Shift.");
+                    handleForceClockOut();
+                };
+            } catch (screenErr: any) {
+                console.error("Screen stream permission denied:", screenErr);
+                alert("❌ Shift Start Blocked: You must enable Screen Sharing (select Entire Screen) to start your WFH shift compliance monitoring.");
+                setIsClockingIn(false);
+                setLocationStatusText(null);
+                return; // Block clock-in on desktop if denied
             }
 
             setLocationStatusText("Syncing Telemetry with Remote Server...");
@@ -1992,6 +1981,33 @@ const EmployeeDashboard = () => {
                                 </div>
                             </div>
 
+                            {/* Mobile Workstation Requirement Notice Banner */}
+                            {isMobileDevice && (
+                                <div className="bg-amber-500/10 border border-amber-500/25 rounded-3xl p-5 sm:p-6 mb-6 shadow-sm animate-fade-in flex items-start gap-4">
+                                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0 mt-0.5 shadow-inner">
+                                        <FiMonitor size={22} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h4 className="text-sm font-black text-amber-900 tracking-tight">
+                                                Desktop Workstation Required for WFH Shifts
+                                            </h4>
+                                            <span className="text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-500 text-white tracking-wider">
+                                                Mobile Policy
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-amber-900/80 font-medium mt-1.5 leading-relaxed">
+                                            Work-from-Home compliance protocols require continuous desktop screen sharing and physical workstation telemetry. 
+                                            You can browse your personal details, attendance records, profile, and tasks on this mobile device, but <strong>shift start is strictly restricted to desktop and laptop computers</strong> (even in browser Desktop Site mode).
+                                        </p>
+                                        <div className="mt-3 flex items-center gap-2 text-[11px] font-bold text-amber-800">
+                                            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                                            <span>Please log in from your laptop or desktop PC to start your shift.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Clock In Control Panel Card */}
                             <div className="bg-white rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/30 p-6 sm:p-10 relative overflow-hidden transition-all duration-300 hover:shadow-2xl">
                                 <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-blue via-emerald-400 to-brand-peacock" />
@@ -2048,6 +2064,16 @@ const EmployeeDashboard = () => {
                                                             <div className="w-6 h-6 border-2 border-brand-blue border-t-transparent rounded-full animate-spin mb-1.5" />
                                                             <span className="text-[8px] text-slate-400 font-extrabold uppercase tracking-widest leading-tight block text-center max-w-[120px]">
                                                                 Syncing GPS...
+                                                            </span>
+                                                        </div>
+                                                    ) : isMobileDevice ? (
+                                                        <div className="flex flex-col items-center justify-center p-2 cursor-pointer" onClick={() => setShowMobileBlockModal(true)}>
+                                                            <FiLock size={20} className="text-amber-500 mb-1" />
+                                                            <span className="text-sm font-black text-slate-700 tracking-tight block">
+                                                                Desktop Only
+                                                            </span>
+                                                            <span className="text-[9px] text-amber-600 font-bold uppercase tracking-wider block mt-0.5">
+                                                                Laptop Required
                                                             </span>
                                                         </div>
                                                     ) : (
@@ -2157,40 +2183,50 @@ const EmployeeDashboard = () => {
                                             </div>
 
                                             {/* Shift Start / Shift Logout Action Button */}
-                                            <button
-                                                onClick={() => {
-                                                    if (!isClockedIn) {
-                                                        handleClockInToggle();
-                                                    } else {
-                                                        setActiveTab("My Tasks");
-                                                        setTimeout(() => {
-                                                            alert("Shift Ended! Please submit your Daily PDF Work Report here to complete your shift logout.");
-                                                            const uploader = document.getElementById("pdf-uploader-widget");
-                                                            uploader?.scrollIntoView({ behavior: "smooth" });
-                                                        }, 300);
-                                                    }
-                                                }}
-                                                disabled={isClockingIn}
-                                                className={`w-full py-4 mt-6 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all duration-300 cursor-pointer border ${
-                                                    isClockingIn
-                                                        ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                                                        : !isClockedIn
-                                                        ? "bg-gradient-to-r from-brand-blue to-brand-peacock text-white border-transparent hover:shadow-md hover:shadow-brand-blue/15 hover:scale-[1.01] active:scale-[0.98]"
-                                                        : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100 hover:border-red-300 hover:shadow active:scale-[0.98]"
-                                                }`}
-                                            >
-                                                {isClockingIn ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                                                        <span className="animate-pulse">{locationStatusText || "Fetching GPS..."}</span>
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <FiPower size={14} />
-                                                        {!isClockedIn ? "Start Shift" : "Shift Logout / End Shift"}
-                                                    </>
-                                                )}
-                                            </button>
+                                            {isMobileDevice && !isClockedIn ? (
+                                                <button
+                                                    onClick={() => setShowMobileBlockModal(true)}
+                                                    className="w-full py-4 mt-6 rounded-xl font-extrabold text-xs flex items-center justify-center gap-2.5 shadow-sm transition-all duration-300 cursor-pointer border border-amber-200 bg-amber-50/90 text-amber-800 hover:bg-amber-100 hover:border-amber-300 active:scale-[0.98]"
+                                                >
+                                                    <FiLock size={16} className="text-amber-600" />
+                                                    <span>Desktop Workstation Required to Start Shift</span>
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => {
+                                                        if (!isClockedIn) {
+                                                            handleClockInToggle();
+                                                        } else {
+                                                            setActiveTab("My Tasks");
+                                                            setTimeout(() => {
+                                                                alert("Shift Ended! Please submit your Daily PDF Work Report here to complete your shift logout.");
+                                                                const uploader = document.getElementById("pdf-uploader-widget");
+                                                                uploader?.scrollIntoView({ behavior: "smooth" });
+                                                            }, 300);
+                                                        }
+                                                    }}
+                                                    disabled={isClockingIn}
+                                                    className={`w-full py-4 mt-6 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all duration-300 cursor-pointer border ${
+                                                        isClockingIn
+                                                            ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                                                            : !isClockedIn
+                                                            ? "bg-gradient-to-r from-brand-blue to-brand-peacock text-white border-transparent hover:shadow-md hover:shadow-brand-blue/15 hover:scale-[1.01] active:scale-[0.98]"
+                                                            : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100 hover:border-red-300 hover:shadow active:scale-[0.98]"
+                                                    }`}
+                                                >
+                                                    {isClockingIn ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                                                            <span className="animate-pulse">{locationStatusText || "Fetching GPS..."}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <FiPower size={14} />
+                                                            {!isClockedIn ? "Start Shift" : "Shift Logout / End Shift"}
+                                                        </>
+                                                    )}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -3128,6 +3164,47 @@ const EmployeeDashboard = () => {
                             className="w-full bg-brand-blue hover:bg-brand-blue-hover text-white font-extrabold py-4 rounded-xl active:scale-[0.98] transition-all text-xs tracking-widest uppercase cursor-pointer shadow-md shadow-brand-blue/15"
                         >
                             Sync Screen Sharing
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Mobile Workstation Policy Strict Compliance Modal */}
+            {showMobileBlockModal && (
+                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[999] flex items-center justify-center p-5 select-none animate-fade-in">
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-2xl p-6 sm:p-8 max-w-md w-full text-center relative overflow-hidden transition-all transform scale-100">
+                        {/* Top Amber Band */}
+                        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 to-orange-500" />
+                        
+                        <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-5 border border-amber-100 shadow-inner">
+                            <FiMonitor size={32} />
+                        </div>
+                        
+                        <h3 className="text-lg font-black text-slate-800 tracking-tight mb-1">
+                            Desktop Workstation Required
+                        </h3>
+                        
+                        <span className="inline-block text-[10px] font-black uppercase tracking-widest text-amber-600 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full mb-4">
+                            Shift Initiation Policy
+                        </span>
+                        
+                        <div className="text-xs text-slate-600 font-medium leading-relaxed mb-6 text-left bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-2">
+                            <p>
+                                WorkTrack Pro compliance protocols require <strong>continuous desktop screen sharing</strong> and <strong>physical workstation telemetry</strong> to record active WFH shifts.
+                            </p>
+                            <p>
+                                Starting a shift from a mobile phone, tablet, or mobile browser (<strong>including Desktop Site mode</strong>) is strictly disabled.
+                            </p>
+                            <p className="text-amber-800 font-bold">
+                                Please open this portal on your <strong>laptop or desktop PC</strong> to start your shift. You may continue to use this mobile device to review your profile, tasks, and attendance records.
+                            </p>
+                        </div>
+                        
+                        <button
+                            onClick={() => setShowMobileBlockModal(false)}
+                            className="w-full bg-slate-800 hover:bg-slate-900 text-white font-extrabold py-3.5 rounded-xl active:scale-[0.98] transition-all text-xs tracking-wider uppercase cursor-pointer shadow-md"
+                        >
+                            Understood, I will use Desktop
                         </button>
                     </div>
                 </div>

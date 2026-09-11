@@ -59,29 +59,47 @@ export const clockIn = async (req: AuthenticatedRequest, res: Response): Promise
       return;
     }
 
+    // Strict Desktop Workstation Compliance Check
+    const userAgent = req.headers["user-agent"] || "";
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|Silk/i.test(userAgent);
+    if (isMobileDevice) {
+      res.status(403).json({
+        error: "Shift Start Blocked: WFH shifts can only be initiated from a Desktop or Laptop computer. Mobile devices and tablets are strictly prohibited for shift recording."
+      });
+      return;
+    }
+
+    const userCondition = {
+      OR: [
+        { userId },
+        ...(employeeId ? [{ employeeId }] : [])
+      ]
+    };
+
+    // Close any stale active shifts from past days in bulk
+    await prisma.shift.updateMany({
+      where: {
+        ...userCondition,
+        status: "Active",
+        shiftStartTime: { lt: startOfToday },
+      },
+      data: {
+        status: "Absent",
+        clockOutReason: "auto_absent_past_day",
+      },
+    });
+
     const activeShift = await prisma.shift.findFirst({
-      where: { userId, status: "Active" },
+      where: {
+        ...userCondition,
+        status: "Active",
+      },
+      orderBy: { shiftStartTime: "desc" },
     });
 
     if (activeShift) {
-      const todayStr = new Date(Date.now() + IST_OFFSET_MS).toISOString().split("T")[0];
-      const activeShiftDateStr = new Date(new Date(activeShift.shiftStartTime).getTime() + IST_OFFSET_MS).toISOString().split("T")[0];
-
-      if (activeShiftDateStr !== todayStr) {
-        await prisma.shift.update({
-          where: { id: activeShift.id },
-          data: {
-            status: "Absent",
-            shiftEndTime: new Date(
-              new Date(activeShift.shiftStartTime).getTime() +
-                appConfig.autoClockOutHours * 60 * 60 * 1000
-            ),
-          },
-        });
-      } else {
-        res.status(400).json({ error: "Active shift already exists. Clock out first.", shift: activeShift });
-        return;
-      }
+      res.status(400).json({ error: "Active shift already exists. You are already clocked in on another device.", shift: activeShift });
+      return;
     }
 
     const newShift = await prisma.shift.create({
@@ -184,14 +202,45 @@ export const clockOut = async (req: AuthenticatedRequest, res: Response): Promis
 
 export const getActiveShift = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const userId = req.user?.id;
-  if (!userId) {
+  const employeeId = req.user?.employeeId;
+  if (!userId && !employeeId) {
     res.status(401).json({ error: "Unauthorized. Missing user credentials in token." });
     return;
   }
 
   try {
+    const IST_OFFSET_MS = 19800000; // 5 hours 30 mins
+    const istNow = new Date(Date.now() + IST_OFFSET_MS);
+    const startOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0) - IST_OFFSET_MS);
+    const endOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999) - IST_OFFSET_MS);
+
+    const userCondition = {
+      OR: [
+        ...(userId ? [{ userId }] : []),
+        ...(employeeId ? [{ employeeId }] : [])
+      ]
+    };
+
+    // 1. Close any stale past-day shifts that are still marked "Active"
+    await prisma.shift.updateMany({
+      where: {
+        ...userCondition,
+        status: "Active",
+        shiftStartTime: { lt: startOfToday },
+      },
+      data: {
+        status: "Absent",
+        clockOutReason: "auto_absent_past_day",
+      },
+    });
+
+    // 2. Fetch the current active shift (with orderBy: { shiftStartTime: "desc" })
     const activeShift = await prisma.shift.findFirst({
-      where: { userId, status: "Active" },
+      where: {
+        ...userCondition,
+        status: "Active",
+      },
+      orderBy: { shiftStartTime: "desc" },
       include: {
         breaks: true,
         tasks: true,
@@ -202,41 +251,17 @@ export const getActiveShift = async (req: AuthenticatedRequest, res: Response): 
       },
     });
 
-    const IST_OFFSET_MS = 19800000; // 5 hours 30 mins
-    if (activeShift) {
-      const todayStr = new Date(Date.now() + IST_OFFSET_MS).toISOString().split("T")[0];
-      const activeShiftDateStr = new Date(new Date(activeShift.shiftStartTime).getTime() + IST_OFFSET_MS).toISOString().split("T")[0];
-
-      if (activeShiftDateStr !== todayStr) {
-        await prisma.shift.update({
-          where: { id: activeShift.id },
-          data: {
-            status: "Absent",
-            shiftEndTime: new Date(
-              new Date(activeShift.shiftStartTime).getTime() +
-                appConfig.autoClockOutHours * 60 * 60 * 1000
-            ),
-          },
-        });
-        res.status(200).json({ shift: null });
-        return;
-      }
-    }
-
     if (!activeShift) {
-      const istNow = new Date(Date.now() + IST_OFFSET_MS);
-      const startOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 0, 0, 0, 0) - IST_OFFSET_MS);
-      const endOfToday = new Date(Date.UTC(istNow.getUTCFullYear(), istNow.getUTCMonth(), istNow.getUTCDate(), 23, 59, 59, 999) - IST_OFFSET_MS);
-
       const completedShiftToday = await prisma.shift.findFirst({
         where: {
-          userId,
+          ...userCondition,
           status: "Completed",
           shiftStartTime: {
             gte: startOfToday,
             lte: endOfToday,
           },
         },
+        orderBy: { shiftStartTime: "desc" },
       });
 
       if (completedShiftToday) {
