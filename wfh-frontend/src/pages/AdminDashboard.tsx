@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSocket } from "@/utils/socket";
 import { 
@@ -109,7 +109,15 @@ const AdminDashboard = () => {
     // Live Screen Fullscreen Stream Viewer states
     const [selectedLiveScreenEmp, setSelectedLiveScreenEmp] = useState<EmployeeAuditData | null>(null);
     const [liveScreenStreamUrl, setLiveScreenStreamUrl] = useState<string | null>(null);
+    // liveFrames state is throttled (used for grid card display, ~1 update/sec)
     const [liveFrames, setLiveFrames] = useState<Record<string, { frame: string; activeWindow?: string; cursor?: { x: number; y: number }; timestamp: number }>>({});
+    // liveFramesRef is for instant access without triggering re-renders
+    const liveFramesRef = useRef<Record<string, { frame: string; activeWindow?: string; timestamp: number }>>({});
+    // Direct DOM ref for the fullscreen modal <img> — updated imperatively at full 5 FPS
+    const modalImgRef = useRef<HTMLImageElement | null>(null);
+    const modalActiveBadgeRef = useRef<HTMLSpanElement | null>(null);
+    const selectedLiveScreenEmpRef = useRef<EmployeeAuditData | null>(null);
+    selectedLiveScreenEmpRef.current = selectedLiveScreenEmp;
     const [isModalFullscreen, setIsModalFullscreen] = useState(false);
 
     // Zoomed screenshot for admin lightbox
@@ -389,17 +397,48 @@ const AdminDashboard = () => {
         const socket = getSocket();
         socket.emit("watch:all");
 
+        // Throttle grid state updates to 1/sec per employee to avoid re-render storm
+        const lastGridUpdateRef: Record<string, number> = {};
+        const GRID_THROTTLE_MS = 1000;
+
         const handleLiveFrame = (data: { employeeId: string; frame: string; cursor?: { x: number; y: number }; activeWindow?: string; timestamp?: number }) => {
             if (!data.employeeId || !data.frame) return;
-            setLiveFrames((prev) => ({
-                ...prev,
-                [data.employeeId]: {
-                    frame: data.frame,
-                    activeWindow: data.activeWindow,
-                    cursor: data.cursor,
-                    timestamp: data.timestamp || Date.now()
+            const now = data.timestamp || Date.now();
+
+            // --- IMPERATIVE UPDATE: fullscreen modal image (no React re-render) ---
+            const activeLiveEmp = selectedLiveScreenEmpRef.current;
+            if (activeLiveEmp && activeLiveEmp.employeeId === data.employeeId) {
+                if (modalImgRef.current) {
+                    modalImgRef.current.src = data.frame;
                 }
-            }));
+                if (modalActiveBadgeRef.current && data.activeWindow) {
+                    modalActiveBadgeRef.current.textContent = data.activeWindow + " • Shift started at: " + (activeLiveEmp.shiftStartTimeRaw
+                        ? new Date(activeLiveEmp.shiftStartTimeRaw).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })
+                        : activeLiveEmp.shiftStartTime || "");
+                }
+            }
+
+            // Always update the ref store (instant, zero re-render cost)
+            liveFramesRef.current[data.employeeId] = {
+                frame: data.frame,
+                activeWindow: data.activeWindow,
+                timestamp: now
+            };
+
+            // Throttled state update for the grid cards
+            const lastUpdate = lastGridUpdateRef[data.employeeId] || 0;
+            if (now - lastUpdate >= GRID_THROTTLE_MS) {
+                lastGridUpdateRef[data.employeeId] = now;
+                setLiveFrames((prev) => ({
+                    ...prev,
+                    [data.employeeId]: {
+                        frame: data.frame,
+                        activeWindow: data.activeWindow,
+                        cursor: data.cursor,
+                        timestamp: now
+                    }
+                }));
+            }
         };
 
         socket.on("live:frame", handleLiveFrame);
@@ -1563,7 +1602,7 @@ const AdminDashboard = () => {
                                                             <img 
                                                                 src={displayImage} 
                                                                 alt={`${mapName(emp.name)} Live Screen`} 
-                                                                className="w-full h-full object-cover transition-opacity duration-200"
+                                                                className="w-full h-full object-cover"
                                                             />
                                                         ) : (
                                                             <div className="flex flex-col items-center justify-center text-slate-500 gap-2 p-4 text-center">
@@ -1595,7 +1634,7 @@ const AdminDashboard = () => {
                                                             {formatShiftTime(emp.shiftStartTimeRaw, emp.shiftStartTime)}
                                                         </span>
                                                         <span className="text-emerald-600 font-bold">
-                                                            {isStreaming ? "⚡ Real-time (1 FPS)" : (emp.cursorStatus === "Moving" ? "Active Moving" : "Idle")}
+                                                            {isStreaming ? "⚡ Real-Time Live" : (emp.isWfhActive ? "Active Shift" : "Offline")}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -2408,7 +2447,7 @@ const AdminDashboard = () => {
                                             {modalIsStreaming ? (
                                                 <span className="flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                                                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                                                    LIVE STREAM (1s)
+                                                    ⚡ REAL-TIME STREAM
                                                 </span>
                                             ) : (
                                                 <span className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
@@ -2417,7 +2456,7 @@ const AdminDashboard = () => {
                                             )}
                                         </div>
                                         <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">
-                                            {modalActiveWindow} • Shift started at: {formatShiftTime(selectedLiveScreenEmp.shiftStartTimeRaw, selectedLiveScreenEmp.shiftStartTime)}
+                                            <span ref={modalActiveBadgeRef}>{modalActiveWindow} • Shift started at: {formatShiftTime(selectedLiveScreenEmp.shiftStartTimeRaw, selectedLiveScreenEmp.shiftStartTime)}</span>
                                         </p>
                                     </div>
                                 </div>
@@ -2449,22 +2488,23 @@ const AdminDashboard = () => {
                                 {modalImage ? (
                                     <div className="relative flex items-center justify-center w-full h-full">
                                         <img 
+                                            ref={modalImgRef}
                                             src={modalImage} 
                                             alt="Live Desktop" 
-                                            className={`${isModalFullscreen ? "max-h-[85vh]" : "max-h-[70vh]"} w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800 transition-all duration-150`}
+                                            className={`${isModalFullscreen ? "max-h-[85vh]" : "max-h-[70vh]"} w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800`}
                                         />
                                     </div>
                                 ) : (
                                     <div className="text-center text-slate-400 space-y-3 py-20">
                                         <FiTv size={48} className="text-emerald-400 animate-pulse mx-auto" />
-                                        <p className="text-sm font-bold">Waiting for live video screen frame from employee companion...</p>
+                                        <p className="text-sm font-bold">Waiting for live video screen frame from employee workstation...</p>
                                     </div>
                                 )}
 
                                 {/* Floating Stream Badge */}
                                 <div className="absolute bottom-6 right-6 bg-slate-900/85 backdrop-blur-md border border-slate-700 text-slate-300 text-[10px] font-bold px-3.5 py-1.5 rounded-full flex items-center gap-2 shadow-lg pointer-events-none">
                                     <span className={`h-2 w-2 rounded-full ${modalIsStreaming ? "bg-emerald-400 animate-ping" : "bg-amber-400"}`}></span>
-                                    <span>{modalIsStreaming ? "WebSocket Live Stream (≈1 FPS)" : "Latest Screen Snapshot"}</span>
+                                    <span>{modalIsStreaming ? "⚡ Real-Time Live Screen Stream" : "Latest Screen Snapshot"}</span>
                                 </div>
                             </div>
 
@@ -2476,7 +2516,7 @@ const AdminDashboard = () => {
                                         <span>Status: <strong className="text-emerald-600">{selectedLiveScreenEmp.currentStatus || "Active"}</strong></span>
                                     </span>
                                     <span className="flex items-center gap-1.5">
-                                        <span>Cursor Activity: <strong>{selectedLiveScreenEmp.cursorStatus}</strong></span>
+                                        <span>Monitoring: <strong className="text-emerald-600">Continuous Screen Active</strong></span>
                                     </span>
                                     {selectedLiveScreenEmp.startAddress && (
                                         <span className="flex items-center gap-1.5 truncate max-w-xs text-slate-500">

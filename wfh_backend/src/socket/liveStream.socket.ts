@@ -37,13 +37,12 @@ export const initLiveSocket = (io: SocketIOServer) => {
       }
 
       // Employee side: send live frame
-      socket.on("live:frame", (data: { frame: string; cursor?: { x: number; y: number }; activeWindow?: string }) => {
+      socket.on("live:frame", (data: { frame: string; activeWindow?: string }) => {
         const employeeId = user.employeeId;
         if (!employeeId) return;
         const payload = { 
           employeeId, 
           frame: data.frame, 
-          cursor: data.cursor || { x: 0, y: 0 }, 
           activeWindow: data.activeWindow || "Desktop Workspace",
           timestamp: Date.now() 
         };

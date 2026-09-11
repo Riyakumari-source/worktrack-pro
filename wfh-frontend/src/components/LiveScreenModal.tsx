@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { getSocket } from '@/utils/socket';
-import { FiMousePointer as FiMouse } from 'react-icons/fi';
 import './LiveScreenModal.css'; // optional CSS for styling
 
 interface LiveScreenModalProps {
@@ -10,7 +9,6 @@ interface LiveScreenModalProps {
 
 export const LiveScreenModal: React.FC<LiveScreenModalProps> = ({ employeeId, onClose }) => {
   const [frame, setFrame] = useState<string>('');
-  const [cursor, setCursor] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [activeWindow, setActiveWindow] = useState<string>('');
 
   useEffect(() => {
@@ -21,11 +19,9 @@ export const LiveScreenModal: React.FC<LiveScreenModalProps> = ({ employeeId, on
     const handleLiveFrame = (data: {
       employeeId: string;
       frame: string;
-      cursor: { x: number; y: number };
       activeWindow?: string;
     }) => {
       setFrame(data.frame);
-      setCursor(data.cursor);
       if (data.activeWindow) setActiveWindow(data.activeWindow);
     };
 
@@ -33,7 +29,6 @@ export const LiveScreenModal: React.FC<LiveScreenModalProps> = ({ employeeId, on
 
     return () => {
       socket.off('live:frame', handleLiveFrame);
-      // Optional: leave room (socket.emit('unwatch:employee', employeeId)) if backend supports it
     };
   }, [employeeId]);
 
@@ -43,21 +38,10 @@ export const LiveScreenModal: React.FC<LiveScreenModalProps> = ({ employeeId, on
         <button className="close-btn" onClick={onClose}>✕</button>
         {frame ? (
           <div className="frame-container" style={{ position: 'relative' }}>
-            <img src={frame} alt="Live screen frame" style={{ width: '100%', height: 'auto' }} />
-            <div
-              style={{
-                position: 'absolute',
-                left: `${cursor.x}px`,
-                top: `${cursor.y}px`,
-                pointerEvents: 'none',
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <FiMouse size={24} color="red" />
-            </div>
+            <img src={frame} alt="Live screen frame" style={{ width: '100%', height: 'auto', display: 'block' }} />
           </div>
         ) : (
-          <p>Waiting for live stream…</p>
+          <p>Connecting to live stream…</p>
         )}
         {activeWindow && <div className="window-tooltip">{activeWindow}</div>}
       </div>

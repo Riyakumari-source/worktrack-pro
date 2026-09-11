@@ -488,16 +488,15 @@ const EmployeeDashboard = () => {
                     }
 
                     if (video.readyState >= 2 && ctx) {
-                        const targetWidth = Math.min(video.videoWidth || 1280, 1280);
-                        const targetHeight = Math.min(video.videoHeight || 720, 720);
+                        const targetWidth = Math.min(video.videoWidth || 1024, 1024);
+                        const targetHeight = Math.min(video.videoHeight || 576, 576);
                         canvas.width = targetWidth;
                         canvas.height = targetHeight;
                         ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
 
-                        const frameData = canvas.toDataURL("image/jpeg", 0.62);
+                        const frameData = canvas.toDataURL("image/jpeg", 0.48);
                         socket.emit("live:frame", {
                             frame: frameData,
-                            cursor: latestMousePosRef.current,
                             activeWindow: document.title || "Active Workspace (Live Stream)"
                         });
                     }
@@ -509,8 +508,9 @@ const EmployeeDashboard = () => {
             }
         };
 
-        const interval = setInterval(captureAndEmitLiveFrame, 1000);
-        const initTimer = setTimeout(captureAndEmitLiveFrame, 800);
+        // 5 FPS smooth real-time streaming (200ms per frame)
+        const interval = setInterval(captureAndEmitLiveFrame, 200);
+        const initTimer = setTimeout(captureAndEmitLiveFrame, 250);
 
         return () => {
             clearInterval(interval);
@@ -1099,6 +1099,17 @@ const EmployeeDashboard = () => {
         return () => clearInterval(interval);
     }, [isClockedIn]);
 
+    const attachScreenStreamListeners = (stream: MediaStream) => {
+        const track = stream.getVideoTracks()[0];
+        if (!track) return;
+        track.onended = () => {
+            console.warn("Screen share track ended or stopped by browser.");
+            screenStreamRef.current = null;
+            // Strictly prevent accidental shift loss: Prompt Re-Share modal instead of force clock-out!
+            setShowScreenSyncModal(true);
+        };
+    };
+
     const handleReSyncScreen = async () => {
         if (isMobileOrTouchDevice() || !isDisplayMediaSupported()) {
             setShowScreenSyncModal(false);
@@ -1107,14 +1118,10 @@ const EmployeeDashboard = () => {
         try {
             const stream = await getScreenStream();
             screenStreamRef.current = stream;
-            
-            stream.getVideoTracks()[0].onended = () => {
-                alert("⚠️ Compliance Alert: Screen sharing was stopped! Ending WFH Shift.");
-                handleForceClockOut();
-            };
+            attachScreenStreamListeners(stream);
             setShowScreenSyncModal(false);
         } catch (err) {
-            alert("❌ Screen Sharing is strictly required to continue your WFH shift compliance monitoring.");
+            console.warn("Screen re-share cancelled or permission denied:", err);
         }
     };
 
