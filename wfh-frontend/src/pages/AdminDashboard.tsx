@@ -25,7 +25,8 @@ import {
     FiMaximize2,
     FiRefreshCw,
     FiRadio,
-    FiMenu
+    FiMenu,
+    FiArrowLeft
 } from "react-icons/fi";
 import { API_BASE_URL } from "../config";
 import { LiveScreenModal } from "@/components/LiveScreenModal";
@@ -100,6 +101,7 @@ const AdminDashboard = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedEmpId, setSelectedEmpId] = useState("");
     const [activeMenu, setActiveMenu] = useState("Overview");
+    const [mobileEmployeeTab, setMobileEmployeeTab] = useState<"list" | "details">("list");
  
     // Selected employee details modal popup
     const [detailsModalEmp, setDetailsModalEmp] = useState<EmployeeAuditData | null>(null);
@@ -510,19 +512,34 @@ const AdminDashboard = () => {
             <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-brand-blue/5 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-peacock/4 rounded-full blur-[120px] -z-10 pointer-events-none"></div>
  
+            {/* Mobile Sidebar Backdrop Overlay */}
+            {mobileSidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-30 md:hidden animate-fade-in"
+                    onClick={() => setMobileSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar (Matching EmployeeSidebar Theme exactly) */}
-            <div className={"w-64 min-h-screen bg-white border-r border-slate-100 p-6 flex flex-col justify-between flex-shrink-0 z-20 " + (mobileSidebarOpen ? "fixed inset-0 z-30 bg-white" : "hidden md:block")}
-                >
+            <aside className={`w-72 max-w-[85vw] min-h-screen bg-white border-r border-slate-100 p-6 flex flex-col justify-between flex-shrink-0 z-40 transition-transform duration-300 md:translate-x-0 md:static md:w-64 md:z-20 md:flex ${
+                mobileSidebarOpen 
+                    ? "fixed inset-y-0 left-0 shadow-2xl translate-x-0" 
+                    : "fixed inset-y-0 left-0 -translate-x-full md:translate-x-0 hidden md:flex"
+            }`}>
                 <div>
                     {/* Logo Section */}
-                    <div className="flex items-center gap-3 mb-10 px-2">
+                    <div className="flex items-center gap-3 mb-8 px-2">
                         <img 
                             src="/logo.png" 
                             alt="Company Logo" 
                             className="h-9 w-auto object-contain animate-fade-in"
                         />
                         {mobileSidebarOpen && (
-                            <button className="ml-auto p-2" onClick={() => setMobileSidebarOpen(false)}>
+                            <button 
+                                className="ml-auto p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all" 
+                                onClick={() => setMobileSidebarOpen(false)}
+                                title="Close Menu"
+                            >
                                 <FiX size={20} />
                             </button>
                         )}
@@ -578,35 +595,35 @@ const AdminDashboard = () => {
                         </div>
                     </div>
                 </div>
-            </div>
+            </aside>
  
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 max-h-screen overflow-y-auto z-10">
                 {/* Navbar (Same clean style) */}
-                <header className="h-20 bg-white border-b border-slate-100 px-8 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
-                    <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-3 py-1 rounded-full">
+                <header className="h-16 sm:h-20 bg-white border-b border-slate-100 px-4 sm:px-8 flex items-center justify-between shadow-xs flex-shrink-0 z-10">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-2.5 sm:px-3 py-1 rounded-full truncate">
                             ADMIN CONTROL BOARD
                         </span>
                     </div>
  
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3 sm:gap-6">
                         {/* Mobile sidebar toggle */}
-                        <button className="md:hidden flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 text-slate-500 hover:bg-slate-100" onClick={() => setMobileSidebarOpen(true)} title="Menu">
-                            <FiMenu size={20} />
+                        <button className="md:hidden flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 text-slate-600 hover:bg-slate-100 active:scale-95 transition-all" onClick={() => setMobileSidebarOpen(true)} title="Menu">
+                            <FiMenu size={18} />
                         </button>
-                        <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
-                            <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl shadow-sm">
+                        <div className="flex items-center gap-2 sm:gap-4 text-xs font-semibold text-slate-500">
+                            <div className="hidden md:flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl shadow-xs">
                                 <FiCalendar className="text-brand-blue" size={16} />
                                 <span>{currentDate || "Loading..."}</span>
                             </div>
-                            <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-100 px-4 py-2 rounded-2xl shadow-sm min-w-[110px]">
+                            <div className="hidden sm:flex items-center gap-2 bg-slate-50 border border-slate-100 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-xs min-w-[100px]">
                                 <FiClock className="text-brand-peacock" size={16} />
                                 <span className="tabular-nums">{currentTime || "Loading..."}</span>
                             </div>
                         </div>
  
-                        <div className="h-6 w-px bg-slate-200" />
+                        <div className="h-5 sm:h-6 w-px bg-slate-200" />
  
                         <button 
                             onClick={() => {
@@ -626,24 +643,24 @@ const AdminDashboard = () => {
                                     navigate("/login");
                                 }
                             }}
-                            className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-300 cursor-pointer shadow-sm"
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-300 cursor-pointer shadow-xs active:scale-95"
                             title="Log Out"
                         >
-                            <FiLogOut size={18} />
+                            <FiLogOut size={16} />
                         </button>
                     </div>
                 </header>
  
                 {/* Dashboard body */}
-                <main className="flex-1 p-8 flex flex-col gap-8 max-w-7xl mx-auto w-full relative">
+                <main className="flex-1 p-3.5 sm:p-6 lg:p-8 flex flex-col gap-5 sm:gap-8 max-w-7xl mx-auto w-full relative">
                     
                     {/* Header welcome banner */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                         <div>
-                            <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">
+                            <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight">
                                 {activeMenu === "Overview" ? "WFH Shift Realtime Overview" : "Remote Work Compliance Audits"}
                             </h2>
-                            <p className="text-sm text-slate-400 mt-1 font-medium">
+                            <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                 {activeMenu === "Overview" 
                                     ? "Live monitoring of all 20 remote team member shifts, start times, and active cursor heartbeats."
                                     : "Audit WFH historical records, compliance task planners, and submitted PDF Work Reports."
@@ -906,57 +923,86 @@ const AdminDashboard = () => {
                             </div>
                         </div>
                     )}
- 
+
                     {/* DUAL-PANE AUDITING TAB VIEW */}
                     {activeMenu === "Employees" && (
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-8 items-start animate-fade-in">
                             {/* KPI cards grid for context */}
-                            <div className="lg:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-6">
-                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-brand-blue/5 text-brand-blue flex items-center justify-center">
-                                        <FiUser size={22} />
+                            <div className="lg:col-span-12 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
+                                <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4">
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-brand-blue/5 text-brand-blue flex items-center justify-center shrink-0">
+                                        <FiUser size={18} />
                                     </div>
-                                    <div>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Total Employees</span>
-                                        <h4 className="text-xl font-black text-slate-800 mt-0.5">{employees.length} Users</h4>
-                                    </div>
-                                </div>
- 
-                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-green-500/5 text-green-500 flex items-center justify-center font-bold">
-                                        <FiActivity size={22} className="animate-pulse" />
-                                    </div>
-                                    <div>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">WFH Active Today</span>
-                                        <h4 className="text-xl font-black text-slate-800 mt-0.5">{employees.filter(e => e.isWfhActive).length} Online</h4>
+                                    <div className="min-w-0">
+                                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest block truncate">Total Staff</span>
+                                        <h4 className="text-sm sm:text-xl font-black text-slate-800 mt-0.5">{employees.length} Users</h4>
                                     </div>
                                 </div>
- 
-                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-amber-500/5 text-amber-500 flex items-center justify-center">
-                                        <FiCoffee size={22} />
+
+                                <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4">
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-green-500/5 text-green-500 flex items-center justify-center shrink-0">
+                                        <FiActivity size={18} className="animate-pulse" />
                                     </div>
-                                    <div>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Active Break Logs</span>
-                                        <h4 className="text-xl font-black text-slate-800 mt-0.5">{employees.filter(e => e.currentStatus === "On Break").length} On Break</h4>
+                                    <div className="min-w-0">
+                                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest block truncate">WFH Active</span>
+                                        <h4 className="text-sm sm:text-xl font-black text-slate-800 mt-0.5">{employees.filter(e => e.isWfhActive).length} Online</h4>
                                     </div>
                                 </div>
- 
-                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-2xl bg-brand-peacock/5 text-brand-peacock flex items-center justify-center">
-                                        <FiFileText size={22} />
+
+                                <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4">
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-500/5 text-amber-500 flex items-center justify-center shrink-0">
+                                        <FiCoffee size={18} />
                                     </div>
-                                    <div>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Task Submissions</span>
-                                        <h4 className="text-xl font-black text-slate-800 mt-0.5">{employees.reduce((acc, curr) => acc + (curr.tasks ? curr.tasks.filter((t: any) => t.completed).length : 0), 0)} Completed</h4>
+                                    <div className="min-w-0">
+                                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest block truncate">Break Logs</span>
+                                        <h4 className="text-sm sm:text-xl font-black text-slate-800 mt-0.5">{employees.filter(e => e.currentStatus === "On Break").length} On Break</h4>
+                                    </div>
+                                </div>
+
+                                <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xs flex items-center gap-3 sm:gap-4">
+                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-brand-peacock/5 text-brand-peacock flex items-center justify-center shrink-0">
+                                        <FiFileText size={18} />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest block truncate">Tasks Done</span>
+                                        <h4 className="text-sm sm:text-xl font-black text-slate-800 mt-0.5">{employees.reduce((acc, curr) => acc + (curr.tasks ? curr.tasks.filter((t: any) => t.completed).length : 0), 0)} Completed</h4>
                                     </div>
                                 </div>
                             </div>
- 
+
+                            {/* Mobile View Switcher (List vs Details) */}
+                            <div className="lg:col-span-12 lg:hidden flex items-center bg-slate-200/70 p-1 rounded-2xl border border-slate-300/40 w-full">
+                                <button
+                                    onClick={() => setMobileEmployeeTab("list")}
+                                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                        mobileEmployeeTab === "list"
+                                            ? "bg-white text-slate-800 shadow-sm"
+                                            : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                >
+                                    <FiUser size={13} />
+                                    <span>Team List ({filteredEmployees.length})</span>
+                                </button>
+                                <button
+                                    onClick={() => setMobileEmployeeTab("details")}
+                                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                        mobileEmployeeTab === "details"
+                                            ? "bg-white text-brand-blue shadow-sm"
+                                            : "text-slate-500 hover:text-slate-800"
+                                    }`}
+                                >
+                                    <FiActivity size={13} />
+                                    <span className="truncate">Audit Details ({mapName(currentEmployee.name).split(" ")[0]})</span>
+                                </button>
+                            </div>
+
                             {/* LEFT COLUMN: Search & Filterable employee list (col-span-4) */}
-                            <div className="lg:col-span-4 space-y-4">
-                                <div className="bg-white border border-slate-100 rounded-3xl p-5 shadow-sm space-y-4">
-                                    <h3 className="text-sm font-bold text-slate-700">Search Remote Team</h3>
+                            <div className={`lg:col-span-4 space-y-4 w-full ${mobileEmployeeTab === "list" ? "block" : "hidden lg:block"}`}>
+                                <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-xs sm:text-sm font-bold text-slate-700">Search Remote Team</h3>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{filteredEmployees.length} Members</span>
+                                    </div>
                                     
                                     {/* Sleek Search Bar */}
                                     <div className="relative flex items-center">
@@ -965,13 +1011,13 @@ const AdminDashboard = () => {
                                             placeholder="Search by name, ID, or role..." 
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 text-slate-800 placeholder-slate-300 outline-none focus:border-brand-blue transition-all duration-200 text-xs font-semibold"
+                                            className="w-full pl-9 pr-4 py-2 sm:py-2.5 rounded-xl border border-slate-200 text-slate-800 placeholder-slate-400 outline-none focus:border-brand-blue transition-all duration-200 text-xs font-semibold"
                                         />
-                                        <FiSearch className="absolute left-3.5 text-slate-300" size={16} />
+                                        <FiSearch className="absolute left-3 text-slate-400" size={15} />
                                     </div>
- 
+
                                     {/* Employee listings */}
-                                    <div className="space-y-3.5 max-h-[420px] overflow-y-auto pr-1">
+                                    <div className="space-y-2.5 sm:space-y-3.5 max-h-[480px] overflow-y-auto pr-1">
                                         {filteredEmployees.length === 0 ? (
                                             <p className="text-xs text-slate-400 text-center py-6 font-medium">No active employees match search query.</p>
                                         ) : (
@@ -981,36 +1027,42 @@ const AdminDashboard = () => {
                                                 return (
                                                     <div 
                                                         key={emp.employeeId}
-                                                        onClick={() => setSelectedEmpId(emp.employeeId)}
-                                                        className={`p-3.5 rounded-2xl border transition-all duration-300 flex items-center justify-between cursor-pointer ${
+                                                        onClick={() => {
+                                                            setSelectedEmpId(emp.employeeId);
+                                                            setMobileEmployeeTab("details");
+                                                        }}
+                                                        className={`p-3 sm:p-3.5 rounded-2xl border transition-all duration-300 flex items-center justify-between cursor-pointer active:scale-[0.99] ${
                                                             isSelected 
-                                                                ? "border-brand-blue ring-4 ring-brand-blue/5 bg-brand-blue/5 shadow-sm" 
-                                                                : "border-slate-100 hover:border-slate-200 bg-white"
+                                                                ? "border-brand-blue ring-2 sm:ring-4 ring-brand-blue/10 bg-brand-blue/5 shadow-xs" 
+                                                                : "border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50/50"
                                                         }`}
                                                     >
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-xs shadow shrink-0">
+                                                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
                                                                 {emp.avatar}
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <h5 className="text-xs font-bold text-slate-800 leading-tight flex items-center gap-1.5">
+                                                                <h5 className="text-xs font-bold text-slate-800 leading-tight flex items-center gap-1.5 truncate">
                                                                     {mapName(emp.name)}
                                                                     {isActive && (
-                                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Working from Home" />
+                                                                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" title="Working from Home" />
                                                                     )}
                                                                 </h5>
-                                                                <p className="text-[10px] text-slate-400 font-semibold mt-0.5 leading-tight">{emp.role} • {emp.employeeId}</p>
+                                                                <p className="text-[10px] text-slate-400 font-semibold mt-0.5 leading-tight truncate">{emp.role.replace(/\s*\(.*?\)\s*/g, "")} • {emp.employeeId}</p>
                                                             </div>
                                                         </div>
- 
+
                                                         {/* Status Pill */}
-                                                        <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                                                            isActive ? "bg-green-50 border-green-200 text-green-600" :
-                                                            emp.currentStatus === "On Break" ? "bg-amber-50 border-amber-200 text-amber-600 animate-pulse" :
-                                                            "bg-slate-50 border-slate-200 text-slate-400"
-                                                        }`}>
-                                                            {isActive ? "Working" : emp.currentStatus}
-                                                        </span>
+                                                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                                                            <span className={`text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                                                                isActive ? "bg-green-50 border-green-200 text-green-600" :
+                                                                emp.currentStatus === "On Break" ? "bg-amber-50 border-amber-200 text-amber-600 animate-pulse" :
+                                                                "bg-slate-50 border-slate-200 text-slate-400"
+                                                            }`}>
+                                                                {isActive ? "Working" : emp.currentStatus}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold text-brand-blue lg:hidden">→</span>
+                                                        </div>
                                                     </div>
                                                 );
                                             })
@@ -1018,33 +1070,46 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
                             </div>
- 
+
                             {/* RIGHT COLUMN: Selected Employee Analytics Dashboard Details (col-span-8) */}
-                            <div className="lg:col-span-8 space-y-6">
+                            <div className={`lg:col-span-8 space-y-4 sm:space-y-6 w-full ${mobileEmployeeTab === "details" ? "block" : "hidden lg:block"}`}>
                                 
+                                {/* Mobile Back Button */}
+                                <div className="lg:hidden flex items-center justify-between bg-white border border-slate-100 rounded-2xl p-2.5 sm:p-3 shadow-xs">
+                                    <button
+                                        onClick={() => setMobileEmployeeTab("list")}
+                                        className="flex items-center gap-1.5 text-xs font-extrabold text-brand-blue hover:text-brand-blue/80 py-1.5 px-3 rounded-xl bg-brand-blue/5 border border-brand-blue/10 active:scale-95 transition-all"
+                                    >
+                                        <FiArrowLeft size={14} /> Back to Team List
+                                    </button>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                        Auditing {currentEmployee.employeeId}
+                                    </span>
+                                </div>
+
                                 {/* Employee summary analytics overview */}
-                                <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 relative overflow-hidden">
+                                <div className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xs space-y-5 sm:space-y-6 relative overflow-hidden">
                                     <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-blue to-brand-peacock" />
                                     
-                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-black text-lg shadow-lg">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 sm:pb-5">
+                                        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-black text-base sm:text-lg shadow-md shrink-0">
                                                 {currentEmployee.avatar}
                                             </div>
-                                            <div>
-                                                <h3 className="text-lg font-black text-slate-800 leading-tight">{currentEmployee.name}</h3>
-                                                <p className="text-xs text-slate-400 font-semibold uppercase mt-0.5 tracking-wider">{currentEmployee.role} • WFH Code: {currentEmployee.employeeId}</p>
+                                            <div className="min-w-0">
+                                                <h3 className="text-base sm:text-lg font-black text-slate-800 leading-tight truncate">{mapName(currentEmployee.name)}</h3>
+                                                <p className="text-[10px] sm:text-xs text-slate-400 font-semibold uppercase mt-0.5 tracking-wider truncate">{currentEmployee.role} • ID: {currentEmployee.employeeId}</p>
                                             </div>
                                         </div>
- 
+
                                         {/* WFH status details */}
-                                        <div className="flex items-center gap-3">
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm text-center">
+                                        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                                            <div className="flex-1 sm:flex-initial min-w-[100px] bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-xs text-center">
                                                 <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">WFH Taken</span>
                                                 <span className="text-xs font-black text-brand-blue mt-0.5 block">{currentEmployee.wfhDaysCount} Days</span>
                                             </div>
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 shadow-sm text-center">
-                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Today Shift Status</span>
+                                            <div className="flex-1 sm:flex-initial min-w-[110px] bg-slate-50 border border-slate-100 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-xs text-center">
+                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Status</span>
                                                 <span className={`text-xs font-black mt-0.5 block uppercase tracking-wider ${
                                                     currentEmployee.isWfhActive 
                                                         ? "text-green-500" 
@@ -1060,12 +1125,12 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     </div>
- 
+
                                     {/* Shift Timing Details (Start and End times) */}
-                                    <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 mb-6 grid grid-cols-2 gap-4 shadow-sm animate-fade-in">
+                                    <div className="bg-slate-50 border border-slate-100 rounded-2xl sm:rounded-3xl p-4 sm:p-5 mb-4 sm:mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 shadow-xs">
                                         <div>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift Start Time</span>
-                                            <span className="text-xs font-black text-slate-700 mt-1 block tabular-nums">
+                                            <span className="text-xs font-black text-slate-700 mt-0.5 block tabular-nums">
                                                 {formatShiftTime(currentEmployee.shiftStartTimeRaw, currentEmployee.shiftStartTime)}
                                             </span>
                                             {currentEmployee.isWfhActive && currentEmployee.shiftStartTimeRaw && (
@@ -1076,7 +1141,7 @@ const AdminDashboard = () => {
                                         </div>
                                         <div>
                                             <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest block">Shift End Time</span>
-                                            <span className="text-xs font-black text-slate-700 mt-1 block tabular-nums">
+                                            <span className="text-xs font-black text-slate-700 mt-0.5 block tabular-nums">
                                                 {currentEmployee.isWfhActive ? (
                                                     <span className="text-emerald-600 font-bold text-[10px] animate-pulse">● Active Now</span>
                                                 ) : (
@@ -1085,25 +1150,25 @@ const AdminDashboard = () => {
                                             </span>
                                         </div>
                                     </div>
- 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                                         {/* 1. Breaks Audit Widget */}
-                                        <div className="space-y-4">
+                                        <div className="space-y-3 sm:space-y-4">
                                             <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                                                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
                                                     <FiCoffee size={14} className="text-amber-500" />
                                                     Breaks Audit Logs
                                                 </h4>
-                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                                                    Total Break: {currentEmployee.breaks.totalDuration}
+                                                <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    Total: {currentEmployee.breaks.totalDuration}
                                                 </span>
                                             </div>
- 
-                                            <div className="grid grid-cols-2 gap-3.5">
+
+                                            <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5">
                                                 {currentEmployee.breaks.history.map((brk, idx) => (
                                                     <div 
                                                         key={idx}
-                                                        className={`rounded-2xl border p-3 flex flex-col justify-between h-20 transition-all duration-300 ${
+                                                        className={`rounded-2xl border p-2.5 sm:p-3 flex flex-col justify-between min-h-[72px] transition-all duration-300 ${
                                                             brk.status === "Used" 
                                                                 ? "bg-amber-50/20 border-amber-200 text-slate-600" 
                                                                 : brk.status === "Locked"
@@ -1120,25 +1185,25 @@ const AdminDashboard = () => {
                                                             )}
                                                         </div>
                                                         <div>
-                                                            <h5 className="text-[10px] font-bold text-slate-800 leading-tight">{brk.name}</h5>
-                                                            <p className="text-[9px] text-slate-400 font-semibold mt-0.5">{brk.time}</p>
+                                                            <h5 className="text-[10px] font-bold text-slate-800 leading-tight truncate">{brk.name}</h5>
+                                                            <p className="text-[9px] text-slate-400 font-semibold mt-0.5 truncate">{brk.time}</p>
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
- 
+
                                         {/* 2. Remote tracking telemetry */}
-                                        <div className="space-y-4">
+                                        <div className="space-y-3 sm:space-y-4">
                                             <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                                                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                                <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 sm:gap-2">
                                                     <FiMonitor size={14} className="text-brand-blue" />
                                                     Telemetry Signals
                                                 </h4>
                                             </div>
- 
+
                                             {/* Mock Active tracking logs */}
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4.5 space-y-3 font-mono text-[9px] font-semibold text-slate-500 max-h-[160px] overflow-y-auto">
+                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 sm:p-4 space-y-2.5 font-mono text-[9px] font-semibold text-slate-500 max-h-[160px] overflow-y-auto">
                                                 {currentEmployee.activityLogs.map((log, idx) => (
                                                     <div key={idx} className="flex items-center gap-2 border-b border-slate-200/30 pb-2 last:border-b-0 last:pb-0">
                                                         <span className="w-1 h-1 rounded-full bg-brand-peacock shrink-0" />
@@ -1148,8 +1213,8 @@ const AdminDashboard = () => {
                                             </div>
                                             
                                             {currentEmployee.isWfhActive && currentEmployee.currentStatus !== "Offline" && (
-                                                <div className="flex items-center justify-between bg-brand-peacock/5 border border-brand-peacock/10 rounded-xl px-3 py-2 text-[9px] font-extrabold text-brand-peacock uppercase tracking-wider">
-                                                    <span>Live Telemetry Coordinates</span>
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 bg-brand-peacock/5 border border-brand-peacock/10 rounded-xl px-3 py-2 text-[9px] font-extrabold text-brand-peacock uppercase tracking-wider">
+                                                    <span>Telemetry</span>
                                                     <span className="tabular-nums">X: {currentEmployee.latestCoordinate.x}px • Y: {currentEmployee.latestCoordinate.y}px</span>
                                                 </div>
                                             )}
@@ -1157,41 +1222,41 @@ const AdminDashboard = () => {
                                     </div>
 
                                     {/* WFH Shift Start Geolocation Card */}
-                                    <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 mb-6 space-y-4 shadow-sm">
-                                        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                                    <div className="bg-slate-50 border border-slate-100 rounded-2xl sm:rounded-3xl p-4 sm:p-5 mb-4 sm:mb-6 space-y-3 sm:space-y-4 shadow-xs">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200 pb-2.5 sm:pb-3">
                                             <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                                                 <FiCompass className="text-brand-blue" size={15} />
-                                                WFH Clock-In Geolocation Audit
+                                                Clock-In Geolocation Audit
                                             </h4>
                                             {currentEmployee.locationFetchedAt && (
-                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                                                     Synced at {new Date(currentEmployee.locationFetchedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                                                 </span>
                                             )}
                                         </div>
 
                                         {currentEmployee.startAddress ? (
-                                            <div className="space-y-4">
+                                            <div className="space-y-3 sm:space-y-4">
                                                 <div className="flex items-start gap-3">
-                                                    <div className="w-9 h-9 rounded-xl bg-brand-blue/5 text-brand-blue flex items-center justify-center shrink-0 mt-0.5 shadow-sm border border-brand-blue/10">
-                                                        <FiMapPin size={18} />
+                                                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-brand-blue/5 text-brand-blue flex items-center justify-center shrink-0 mt-0.5 shadow-xs border border-brand-blue/10">
+                                                        <FiMapPin size={16} />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Resolved Physical Address</span>
-                                                        <p className="text-xs font-semibold text-slate-700 leading-normal mt-0.5">
+                                                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Resolved Physical Address</span>
+                                                        <p className="text-xs font-semibold text-slate-700 leading-normal mt-0.5 break-words">
                                                             {currentEmployee.startAddress}
                                                         </p>
                                                     </div>
                                                 </div>
 
                                                 {currentEmployee.latitude && currentEmployee.longitude && (
-                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-200/50">
-                                                        <div className="text-[10px] font-bold text-slate-500 font-mono">
-                                                            COORDINATES: {currentEmployee.latitude.toFixed(6)}, {currentEmployee.longitude.toFixed(6)}
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 sm:pt-3 border-t border-slate-200/50">
+                                                        <div className="text-[9px] sm:text-[10px] font-bold text-slate-500 font-mono break-all">
+                                                            COORD: {currentEmployee.latitude.toFixed(6)}, {currentEmployee.longitude.toFixed(6)}
                                                         </div>
                                                         <button
                                                             onClick={() => window.open(`https://www.google.com/maps?q=${currentEmployee.latitude},${currentEmployee.longitude}`, "_blank")}
-                                                            className="py-2 px-3.5 rounded-xl bg-brand-blue text-white font-extrabold text-[9px] uppercase tracking-wider hover:bg-brand-blue/90 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer outline-none border-none flex items-center gap-1.5"
+                                                            className="py-2 px-3 rounded-xl bg-brand-blue text-white font-extrabold text-[9px] uppercase tracking-wider hover:bg-brand-blue/90 hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer outline-none border-none flex items-center justify-center gap-1.5 w-full sm:w-auto"
                                                         >
                                                             <FiMapPin size={10} /> View on Google Maps
                                                         </button>
@@ -1199,49 +1264,49 @@ const AdminDashboard = () => {
                                                 )}
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-2.5 text-xs text-slate-400 bg-white border border-slate-100 rounded-xl p-3.5">
-                                                <FiCompass size={16} />
+                                            <div className="flex items-center gap-2.5 text-xs text-slate-400 bg-white border border-slate-100 rounded-xl p-3">
+                                                <FiCompass size={15} />
                                                 <span>Location auditing telemetry was offline for this shift session.</span>
                                             </div>
                                         )}
                                     </div>
- 
+
                                     {/* WFH Shift End Geolocation Card */}
                                     {currentEmployee.endAddress && (
-                                        <div className="bg-slate-50 border border-slate-100 rounded-3xl p-5 mb-6 space-y-4 shadow-sm animate-fade-in">
-                                            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                                        <div className="bg-slate-50 border border-slate-100 rounded-2xl sm:rounded-3xl p-4 sm:p-5 mb-4 sm:mb-6 space-y-3 sm:space-y-4 shadow-xs animate-fade-in">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200 pb-2.5 sm:pb-3">
                                                 <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                                                     <FiCompass className="text-brand-peacock" size={15} />
-                                                    WFH Clock-Out Geolocation Audit
+                                                    Clock-Out Geolocation Audit
                                                 </h4>
                                                 {currentEmployee.endLocationFetchedAt && (
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest">
                                                         Synced at {new Date(currentEmployee.endLocationFetchedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                                                     </span>
                                                 )}
                                             </div>
- 
-                                            <div className="space-y-4">
+
+                                            <div className="space-y-3 sm:space-y-4">
                                                 <div className="flex items-start gap-3">
-                                                    <div className="w-9 h-9 rounded-xl bg-brand-peacock/5 text-brand-peacock flex items-center justify-center shrink-0 mt-0.5 shadow-sm border border-brand-peacock/10">
-                                                        <FiMapPin size={18} />
+                                                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-brand-peacock/5 text-brand-peacock flex items-center justify-center shrink-0 mt-0.5 shadow-xs border border-brand-peacock/10">
+                                                        <FiMapPin size={16} />
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Resolved Physical Address</span>
-                                                        <p className="text-xs font-semibold text-slate-700 leading-normal mt-0.5">
+                                                        <span className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Resolved Physical Address</span>
+                                                        <p className="text-xs font-semibold text-slate-700 leading-normal mt-0.5 break-words">
                                                             {currentEmployee.endAddress}
                                                         </p>
                                                     </div>
                                                 </div>
- 
+
                                                 {currentEmployee.endLatitude && currentEmployee.endLongitude && (
-                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-200/50">
-                                                        <div className="text-[10px] font-bold text-slate-500 font-mono">
-                                                            COORDINATES: {currentEmployee.endLatitude.toFixed(6)}, {currentEmployee.endLongitude.toFixed(6)}
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2.5 sm:pt-3 border-t border-slate-200/50">
+                                                        <div className="text-[9px] sm:text-[10px] font-bold text-slate-500 font-mono break-all">
+                                                            COORD: {currentEmployee.endLatitude.toFixed(6)}, {currentEmployee.endLongitude.toFixed(6)}
                                                         </div>
                                                         <button
                                                             onClick={() => window.open(`https://www.google.com/maps?q=${currentEmployee.endLatitude},${currentEmployee.endLongitude}`, "_blank")}
-                                                            className="py-2 px-3.5 rounded-xl bg-brand-peacock text-white font-extrabold text-[9px] uppercase tracking-wider hover:bg-brand-peacock/90 hover:shadow-md transition-all active:scale-[0.98] cursor-pointer outline-none border-none flex items-center gap-1.5"
+                                                            className="py-2 px-3 rounded-xl bg-brand-peacock text-white font-extrabold text-[9px] uppercase tracking-wider hover:bg-brand-peacock/90 hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer outline-none border-none flex items-center justify-center gap-1.5 w-full sm:w-auto"
                                                         >
                                                             <FiMapPin size={10} /> View on Google Maps
                                                         </button>
@@ -1250,25 +1315,25 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     )}
- 
+
                                     {/* 3. Submitted daily Tasks Board */}
-                                    <div className="space-y-4 pt-4 border-t border-slate-100">
-                                        <div className="flex items-center justify-between border-b border-slate-50 pb-2">
+                                    <div className="space-y-3 sm:space-y-4 pt-4 border-t border-slate-100">
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-50 pb-2">
                                             <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                                                 <FiCheckSquare size={14} className="text-green-500" />
                                                 Assigned WFH Tasks & Shifts
                                             </h4>
-                                            <span className={`text-[10px] font-black uppercase tracking-wider ${currentEmployee.pdfReport ? "text-green-500" : "text-amber-500 animate-pulse"}`}>
+                                            <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${currentEmployee.pdfReport ? "text-green-500" : "text-amber-500 animate-pulse"}`}>
                                                 {currentEmployee.pdfReport ? "Submission Completed" : "Shift Report Pending"}
                                             </span>
                                         </div>
- 
+
                                         {/* Task items list */}
                                         <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
                                             {currentEmployee.tasks.map((task, index) => (
                                                 <div 
                                                     key={index}
-                                                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all duration-300 ${
+                                                    className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-all duration-300 ${
                                                         task.completed 
                                                             ? "bg-green-50/20 border-green-100" 
                                                             : "border-slate-100 bg-white"
@@ -1281,42 +1346,42 @@ const AdminDashboard = () => {
                                                     }`}>
                                                         {task.completed && <FiCheck size={12} className="stroke-[3]" />}
                                                     </div>
-                                                    <span className={`text-xs font-semibold leading-tight ${task.completed ? "text-slate-500 line-through" : "text-slate-700"}`}>
+                                                    <span className={`text-xs font-semibold leading-tight min-w-0 flex-1 break-words ${task.completed ? "text-slate-500 line-through" : "text-slate-700"}`}>
                                                         {task.text}
                                                     </span>
                                                     {task.completed && task.completedAt && (
-                                                        <span className="text-[8px] font-bold text-green-500 bg-green-50 border border-green-100 rounded-full px-2.5 py-0.5 ml-auto uppercase">
+                                                        <span className="text-[8px] font-bold text-green-500 bg-green-50 border border-green-100 rounded-full px-2 py-0.5 ml-auto uppercase shrink-0">
                                                             {task.completedAt.replace("Completed at ", "")}
                                                         </span>
                                                     )}
                                                 </div>
                                             ))}
                                         </div>
- 
+
                                         {/* PDF Work report section display */}
                                         {currentEmployee.pdfReport ? (
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4 shadow-sm animate-fade-in">
+                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 sm:p-4.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mt-4 shadow-xs animate-fade-in">
                                                 <div className="flex items-center gap-3 min-w-0">
-                                                    <div className="w-10 h-10 rounded-xl bg-green-500 text-white flex items-center justify-center shadow shrink-0">
-                                                        <FiFileText size={20} />
+                                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-green-500 text-white flex items-center justify-center shadow-xs shrink-0">
+                                                        <FiFileText size={18} />
                                                     </div>
                                                     <div className="min-w-0">
                                                         <h5 className="text-xs font-bold text-slate-700 truncate leading-tight">{currentEmployee.pdfReport.name}</h5>
-                                                        <p className="text-[10px] text-slate-400 mt-0.5">{currentEmployee.pdfReport.size} • {currentEmployee.pdfReport.uploadedAt}</p>
+                                                        <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5">{currentEmployee.pdfReport.size} • {currentEmployee.pdfReport.uploadedAt}</p>
                                                     </div>
                                                 </div>
                                                 
                                                 <button 
                                                     onClick={() => currentEmployee.pdfReport?.name && window.open(`${API_BASE_URL}/api/files/download/reports/${currentEmployee.pdfReport.name}?token=${sessionStorage.getItem("wfh_auth_token")}`, "_blank")}
-                                                    className="py-2.5 px-4 rounded-xl bg-slate-800 text-white font-bold text-[10px] uppercase tracking-wider hover:bg-slate-900 active:scale-[0.98] transition-all whitespace-nowrap cursor-pointer shadow-sm text-center"
+                                                    className="py-2.5 px-4 rounded-xl bg-slate-800 text-white font-bold text-[10px] uppercase tracking-wider hover:bg-slate-900 active:scale-[0.98] transition-all whitespace-nowrap cursor-pointer shadow-xs text-center w-full sm:w-auto"
                                                 >
                                                     Audit PDF Document
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 flex items-center gap-3 text-slate-400 mt-4 shadow-inner">
-                                                <FiShield size={22} className="text-amber-500" />
-                                                <p className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-full">
+                                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 sm:p-4.5 flex items-center gap-3 text-slate-400 mt-4 shadow-inner">
+                                                <FiShield size={20} className="text-amber-500 shrink-0" />
+                                                <p className="text-xs font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-full leading-normal">
                                                     🚨 Compliance Alert: Missing Shift Report submission for today!
                                                 </p>
                                             </div>
@@ -1326,7 +1391,7 @@ const AdminDashboard = () => {
                             </div>
                         </div>
                     )}
- 
+
                     {/* LIVE SCREENS SURVEILLANCE TAB */}
                     {activeMenu === "Live Screens" && (
                         <div className="space-y-6 animate-fade-in">

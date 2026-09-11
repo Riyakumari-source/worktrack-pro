@@ -36,6 +36,8 @@ export const appConfig = {
   shiftHistoryLimit: parseInt(process.env.SHIFT_HISTORY_LIMIT || "30", 10),
 
   corsOrigin: process.env.CORS_ORIGIN || "*",
+  jwtSecret: process.env.JWT_SECRET || "wfh_secret_key_2026_super_secure_telemetry",
+  timezone: process.env.TIMEZONE || "Asia/Kolkata",
 };
 
 /** Shift target in seconds (one second less than full hours, matching UI countdown). */

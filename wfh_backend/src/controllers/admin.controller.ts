@@ -3,6 +3,8 @@ import prisma from "../lib/prisma";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 import { appConfig, formatBreakDuration } from "../config/app.config";
 
+const TIMEZONE = appConfig.timezone || "Asia/Kolkata";
+
 export const getEmployeesFeed = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     // 1. Fetch all registered users with role EMPLOYEE, along with their latest shift, breaks, tasks, telemetry, and shifts count
