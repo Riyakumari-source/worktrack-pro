@@ -14,8 +14,12 @@ export const getScreenshots = async (req: AuthenticatedRequest, res: Response): 
   const skip = parseInt(req.query.skip as string) || 0;
 
   try {
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const screenshots = await prisma.screenshot.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        capturedAt: { gte: twoDaysAgo }
+      },
       orderBy: { capturedAt: "desc" },
       take: limit,
       skip: skip,

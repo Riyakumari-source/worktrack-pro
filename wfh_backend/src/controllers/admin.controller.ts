@@ -317,11 +317,12 @@ const IST_OFFSET_MS = 19800000; // 5 hours 30 mins in milliseconds
   }
 };
 
-// GET /api/admin/employee/:employeeId/screenshots (restricted to only 24 hours)
+// GET /api/admin/employee/:employeeId/screenshots (restricted to max 2 days / 48 hours history)
 export const getEmployeeScreenshots = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const { employeeId } = req.params as { employeeId: string };
   const limit = parseInt(req.query.limit as string) || 12;
   const skip = parseInt(req.query.skip as string) || 0;
+  const targetDateStr = req.query.date as string | undefined;
 
   try {
     const user = await prisma.regUser.findFirst({
@@ -336,27 +337,53 @@ export const getEmployeeScreenshots = async (req: AuthenticatedRequest, res: Res
     });
 
     if (!user) {
-      res.status(200).json({ screenshots: [], hasMore: false });
+      res.status(200).json({ screenshots: [], hasMore: false, totalCount: 0 });
       return;
     }
 
-    // Filter screenshots: strictly show only those captured within the last 24 hours
-    const oneDayAgo = new Date(Date.now() - appConfig.adminScreenshotWindowHours * 60 * 60 * 1000);
+    // Determine 2-day (48-hour) historical window
+    const windowHours = appConfig.adminScreenshotWindowHours || 48;
+    let startDate: Date;
+    let endDate: Date;
 
-    const dbScreenshots = await prisma.screenshot.findMany({
-      where: {
-        userId: user.id,
-        capturedAt: { gte: oneDayAgo }
-      },
-      orderBy: { capturedAt: "desc" },
-      take: limit + 1,
-      skip: skip
-    });
+    if (targetDateStr) {
+      // If a specific login date is provided, show up to 2 days starting from that date
+      const parsed = new Date(targetDateStr);
+      if (!isNaN(parsed.getTime())) {
+        startDate = new Date(parsed.setHours(0, 0, 0, 0));
+        endDate = new Date(startDate.getTime() + (2 * 24 * 60 * 60 * 1000));
+      } else {
+        startDate = new Date(Date.now() - (windowHours * 60 * 60 * 1000));
+        endDate = new Date();
+      }
+    } else {
+      // Default: strictly last 2 days (48 hours)
+      startDate = new Date(Date.now() - (windowHours * 60 * 60 * 1000));
+      endDate = new Date();
+    }
+
+    const whereCondition = {
+      userId: user.id,
+      capturedAt: {
+        gte: startDate,
+        lte: endDate,
+      }
+    };
+
+    const [totalCount, dbScreenshots] = await Promise.all([
+      prisma.screenshot.count({ where: whereCondition }),
+      prisma.screenshot.findMany({
+        where: whereCondition,
+        orderBy: { capturedAt: "desc" },
+        take: limit + 1,
+        skip: skip
+      })
+    ]);
 
     const hasMore = dbScreenshots.length > limit;
     const screenshots = hasMore ? dbScreenshots.slice(0, limit) : dbScreenshots;
 
-    res.status(200).json({ screenshots, hasMore });
+    res.status(200).json({ screenshots, hasMore, totalCount, windowHours });
   } catch (error: any) {
     res.status(500).json({ error: error.message || "Failed to retrieve employee screenshots" });
   }

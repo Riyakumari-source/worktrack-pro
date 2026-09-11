@@ -128,12 +128,14 @@ const AdminDashboard = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     // New states for toggling screenshots and paging inside the Screenshots tab
+    const [screenshotTabFilter, setScreenshotTabFilter] = useState<"all" | "active" | "completed">("all");
     const [expandedEmpIds, setExpandedEmpIds] = useState<string[]>([]);
     const [expandedScreenshots, setExpandedScreenshots] = useState<Record<string, {
         screenshots: any[];
         skip: number;
         hasMore: boolean;
         isLoading: boolean;
+        totalCount?: number;
     }>>({});
 
     // New states and fetch for PDF Reports tab
@@ -194,6 +196,35 @@ const AdminDashboard = () => {
         }
     }, [activeMenu]);
 
+    // Helper to format screenshot timestamp with 2-day awareness (Today, Yesterday, or DD Mon)
+    const formatRelativeScreenshotTime = (rawDate: string | Date) => {
+        if (!rawDate) return "Unknown Date";
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) return "Unknown Date";
+
+        const now = new Date();
+        const isToday = d.getDate() === now.getDate() &&
+                        d.getMonth() === now.getMonth() &&
+                        d.getFullYear() === now.getFullYear();
+
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = d.getDate() === yesterday.getDate() &&
+                            d.getMonth() === yesterday.getMonth() &&
+                            d.getFullYear() === yesterday.getFullYear();
+
+        const timeStr = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+
+        if (isToday) {
+            return `Today, ${timeStr}`;
+        }
+        if (isYesterday) {
+            return `Yesterday, ${timeStr}`;
+        }
+        const dateStr = d.toLocaleDateString("en-US", { day: "numeric", month: "short" });
+        return `${dateStr}, ${timeStr}`;
+    };
+
     const fetchScreenshotsForEmp = async (employeeId: string, isLoadMore = false) => {
         try {
             const token = sessionStorage.getItem("wfh_auth_token");
@@ -219,12 +250,11 @@ const AdminDashboard = () => {
                 const data = await res.json();
                 if (data && data.screenshots) {
                     const formatted = data.screenshots.map((ss: any) => {
-                        const d = new Date(ss.capturedAt);
-                        const timeStr = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
                         return {
                             id: ss.id,
                             imageUrl: ss.imageUrl.startsWith("/") ? `${API_BASE_URL}${ss.imageUrl}?token=${token}` : ss.imageUrl,
-                            timestamp: timeStr,
+                            timestamp: formatRelativeScreenshotTime(ss.capturedAt),
+                            rawCapturedAt: ss.capturedAt,
                             activeWindow: ss.activeWindow,
                             status: ss.status || "Uploaded"
                         };
@@ -239,7 +269,8 @@ const AdminDashboard = () => {
                                 screenshots: newList,
                                 skip: skip,
                                 hasMore: data.hasMore || false,
-                                isLoading: false
+                                isLoading: false,
+                                totalCount: data.totalCount ?? (newList.length)
                             }
                         };
                     });
@@ -427,12 +458,11 @@ const AdminDashboard = () => {
                     const data = await res.json();
                     if (data && data.screenshots) {
                         const formatted = data.screenshots.map((ss: any) => {
-                            const d = new Date(ss.capturedAt);
-                            const timeStr = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
                             return {
                                 id: ss.id,
                                 imageUrl: ss.imageUrl.startsWith("/") ? `${API_BASE_URL}${ss.imageUrl}?token=${token}` : ss.imageUrl,
-                                timestamp: timeStr,
+                                timestamp: formatRelativeScreenshotTime(ss.capturedAt),
+                                rawCapturedAt: ss.capturedAt,
                                 activeWindow: ss.activeWindow,
                                 status: ss.status || "Uploaded"
                             };
@@ -1579,22 +1609,76 @@ const AdminDashboard = () => {
                     {/* SCREENSHOTS COMPLIANCE TAB */}
                     {activeMenu === "Screenshots" && (
                         <div className="bg-white border border-slate-100 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fade-in">
-                            <div className="border-b border-slate-100 pb-4">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-peacock bg-brand-peacock/5 border border-brand-peacock/10 px-3 py-1 rounded-full">
-                                    LIVE MONITOR PANEL
-                                </span>
-                                <h3 className="text-xl font-black text-slate-800 mt-2">Remote Screenshots Compliance Captures</h3>
-                                <p className="text-xs text-slate-400 mt-0.5">Real-time desktop screenshot captures synchronized from employee desktop companions (2-minute intervals).</p>
+                            <div className="border-b border-slate-100 pb-4 space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-brand-peacock bg-brand-peacock/5 border border-brand-peacock/10 px-3 py-1 rounded-full">
+                                                TELEMETRY COMPLIANCE PANEL
+                                            </span>
+                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
+                                                Max 2-Day History (48h)
+                                            </span>
+                                        </div>
+                                        <h3 className="text-xl font-black text-slate-800 mt-2">Remote Screenshots Compliance Captures</h3>
+                                        <p className="text-xs text-slate-400 mt-0.5">Automated desktop screenshot captures synchronized from employee workstations every 30 minutes, stored for max 2 days (48 hours).</p>
+                                    </div>
+                                </div>
+
+                                {/* Filter Pills */}
+                                <div className="flex flex-wrap items-center gap-2 pt-1">
+                                    <button
+                                        onClick={() => setScreenshotTabFilter("all")}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                            screenshotTabFilter === "all"
+                                                ? "bg-brand-blue text-white shadow-sm"
+                                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                        }`}
+                                    >
+                                        All Team ({employees.length})
+                                    </button>
+                                    <button
+                                        onClick={() => setScreenshotTabFilter("active")}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                            screenshotTabFilter === "active"
+                                                ? "bg-emerald-600 text-white shadow-sm"
+                                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                        }`}
+                                    >
+                                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        Currently Active ({employees.filter(e => e.isWfhActive).length})
+                                    </button>
+                                    <button
+                                        onClick={() => setScreenshotTabFilter("completed")}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                            screenshotTabFilter === "completed"
+                                                ? "bg-slate-700 text-white shadow-sm"
+                                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                        }`}
+                                    >
+                                        Completed / Offline ({employees.filter(e => !e.isWfhActive).length})
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="space-y-4">
-                                {employees.filter((emp: EmployeeAuditData) => emp.isWfhActive).length === 0 ? (
+                                {employees
+                                    .filter((emp: EmployeeAuditData) => {
+                                        if (screenshotTabFilter === "active") return emp.isWfhActive;
+                                        if (screenshotTabFilter === "completed") return !emp.isWfhActive;
+                                        return true;
+                                    })
+                                    .length === 0 ? (
                                     <div className="py-16 text-center text-slate-400 font-bold text-xs uppercase tracking-wider bg-slate-50 border border-slate-100 rounded-3xl">
-                                        No active WFH employees are currently clocked in.
+                                        No employees found matching the "{screenshotTabFilter}" filter.
                                     </div>
                                 ) : (
                                     employees
-                                        .filter((emp: EmployeeAuditData) => emp.isWfhActive)
+                                        .filter((emp: EmployeeAuditData) => {
+                                            if (screenshotTabFilter === "active") return emp.isWfhActive;
+                                            if (screenshotTabFilter === "completed") return !emp.isWfhActive;
+                                            return true;
+                                        })
                                         .map((emp: EmployeeAuditData) => {
                                             const isExpanded = expandedEmpIds.includes(emp.employeeId);
                                             const data = expandedScreenshots[emp.employeeId] || { screenshots: [], skip: 0, hasMore: false, isLoading: false };
@@ -1611,8 +1695,24 @@ const AdminDashboard = () => {
                                                                 {emp.avatar}
                                                             </div>
                                                             <div>
-                                                                <h4 className="text-sm font-bold text-slate-800 leading-tight">{mapName(emp.name)}</h4>
-                                                                <p className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider">{emp.employeeId} • WFH Active</p>
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <h4 className="text-sm font-bold text-slate-800 leading-tight">{mapName(emp.name)}</h4>
+                                                                    {emp.isWfhActive ? (
+                                                                        <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-extrabold uppercase tracking-wider flex items-center gap-1">
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Active
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold uppercase tracking-wider">
+                                                                            Completed / Offline
+                                                                        </span>
+                                                                    )}
+                                                                    {data.totalCount !== undefined && data.totalCount > 0 && (
+                                                                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[9px] font-extrabold">
+                                                                            {data.totalCount} captures (2 days)
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="text-[10px] text-slate-400 font-bold mt-0.5 uppercase tracking-wider">ID: {emp.employeeId} • Shift: {emp.shiftStartTimeRaw ? formatShiftTime(emp.shiftStartTimeRaw, emp.shiftStartTime) : (emp.shiftStartTime || "Not Started")}</p>
                                                             </div>
                                                         </div>
 
@@ -1625,7 +1725,7 @@ const AdminDashboard = () => {
                                                             }`}
                                                         >
                                                             <FiEye size={14} />
-                                                            {isExpanded ? "Close Eye" : "Keep an Eye"}
+                                                            {isExpanded ? "Hide 2-Day History" : "View 2-Day History"}
                                                         </button>
                                                     </div>
 
@@ -1635,14 +1735,22 @@ const AdminDashboard = () => {
                                                             {data.isLoading && data.screenshots.length === 0 ? (
                                                                 <div className="flex flex-col items-center justify-center py-10 gap-3">
                                                                     <div className="w-6 h-6 border-2 border-brand-blue border-t-transparent rounded-full animate-spin"></div>
-                                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Syncing screens from database...</p>
+                                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Syncing 2-day screenshots from database...</p>
                                                                 </div>
                                                             ) : data.screenshots.length === 0 ? (
                                                                 <p className="text-xs text-slate-400 text-center py-6 font-semibold bg-slate-50/50 rounded-xl">
-                                                                    No screenshot uploads captured from companion agent yet.
+                                                                    No screenshot uploads captured in the last 2 days for this employee.
                                                                 </p>
                                                             ) : (
                                                                 <div className="space-y-6">
+                                                                    <div className="flex items-center justify-between px-1">
+                                                                        <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                                                                            Showing {data.screenshots.length} of {data.totalCount ?? data.screenshots.length} captures (Last 48 Hours)
+                                                                        </span>
+                                                                        <span className="text-[10px] font-bold text-brand-peacock">
+                                                                            Every 30 Min Interval
+                                                                        </span>
+                                                                    </div>
                                                                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                                                                         {data.screenshots.map((ss: any) => (
                                                                             <div 
@@ -1670,7 +1778,7 @@ const AdminDashboard = () => {
                                                                                         {ss.activeWindow}
                                                                                     </span>
                                                                                     <span className="text-[8px] font-black text-brand-peacock uppercase tracking-widest">
-                                                                                        Captured at {ss.timestamp}
+                                                                                        {ss.timestamp}
                                                                                     </span>
                                                                                 </div>
                                                                             </div>

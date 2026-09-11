@@ -189,6 +189,7 @@ const EmployeeDashboard = () => {
     const [screenshots, setScreenshots] = useState<any[]>([]);
     const [screenNotification, setScreenNotification] = useState<{ show: boolean; message: string }>({ show: false, message: "" });
     const screenStreamRef = useRef<MediaStream | null>(null);
+    const lastScreenshotTimeRef = useRef<number>(Date.now());
     const [showScreenSyncModal, setShowScreenSyncModal] = useState(false);
     const persistentLiveVideoRef = useRef<HTMLVideoElement | null>(null);
     const persistentLiveCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -333,8 +334,25 @@ const EmployeeDashboard = () => {
             isUploadingScreenshotRef.current = true;
             let blob: Blob | null = null;
 
-            // 1. Try native ImageCapture API (Instantaneous & Native)
-            if ("ImageCapture" in window) {
+            // 1. Instant Grab from active persistent video element (0 lag, zero-timeout, rock solid)
+            if (persistentLiveVideoRef.current && persistentLiveVideoRef.current.readyState >= 2) {
+                try {
+                    const video = persistentLiveVideoRef.current;
+                    const canvas = document.createElement("canvas");
+                    canvas.width = video.videoWidth || 1280;
+                    canvas.height = video.videoHeight || 720;
+                    const ctx = canvas.getContext("2d");
+                    if (ctx) {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.85));
+                    }
+                } catch (pvErr) {
+                    console.warn("Persistent video canvas snapshot fallback:", pvErr);
+                }
+            }
+
+            // 2. Try native ImageCapture API if video grab was not ready
+            if (!blob && "ImageCapture" in window) {
                 try {
                     const imageCapture = new (window as any).ImageCapture(track);
                     const bitmap = await imageCapture.grabFrame();
@@ -344,14 +362,14 @@ const EmployeeDashboard = () => {
                     const ctx = canvas.getContext("2d");
                     if (ctx) {
                         ctx.drawImage(bitmap, 0, 0);
-                        blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png", 0.85));
+                        blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.85));
                     }
                 } catch (icErr) {
                     console.warn("ImageCapture fallback to video canvas:", icErr);
                 }
             }
 
-            // 2. Fallback to Video Element with guaranteed 1.2s timeout
+            // 3. Fallback to temporary video element
             if (!blob) {
                 blob = await new Promise<Blob | null>((resolve) => {
                     const video = document.createElement("video");
@@ -377,17 +395,17 @@ const EmployeeDashboard = () => {
                             const ctx = canvas.getContext("2d");
                             if (ctx) {
                                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                                canvas.toBlob((b) => finish(b), "image/png", 0.85);
+                                canvas.toBlob((b) => finish(b), "image/jpeg", 0.85);
                                 return;
                             }
                         } catch (err) {}
                         finish(null);
                     };
 
-                    const safetyTimer = setTimeout(draw, 1200);
+                    const safetyTimer = setTimeout(draw, 1000);
 
                     video.onloadeddata = () => {
-                        video.play().then(() => setTimeout(draw, 100)).catch(draw);
+                        video.play().then(() => setTimeout(draw, 80)).catch(draw);
                     };
                     video.play().catch(() => {});
                 });
@@ -398,7 +416,7 @@ const EmployeeDashboard = () => {
                 return;
             }
 
-            const file = new File([blob], `screenshot-${Date.now()}.png`, { type: "image/png" });
+            const file = new File([blob], `screenshot-${Date.now()}.jpg`, { type: "image/jpeg" });
             const token = sessionStorage.getItem("wfh_auth_token");
             const formData = new FormData();
             formData.append("screenshot", file);
@@ -414,6 +432,13 @@ const EmployeeDashboard = () => {
 
             if (res.ok) {
                 fetchScreenshots();
+                setScreenNotification({
+                    show: true,
+                    message: `Compliance Screenshot Captured & Uploaded (${new Date().toLocaleTimeString()})`
+                });
+                setTimeout(() => {
+                    setScreenNotification({ show: false, message: "" });
+                }, 3500);
             }
         } catch (err) {
             console.error("Failed to capture and upload screenshot:", err);
@@ -900,13 +925,18 @@ const EmployeeDashboard = () => {
                     return prev - 1;
                 });
 
-                setScreenCountdown(prev => {
-                    if (prev <= 1) {
-                        captureAndUploadLiveScreenshot();
-                        return appCfgRef.current.screenshotIntervalSeconds;
-                    }
-                    return prev - 1;
-                });
+                // Resilient wall-clock accurate screenshot interval (immune to browser tab background throttling)
+                const nowMs = Date.now();
+                const intervalSecs = appCfgRef.current.screenshotIntervalSeconds || 1800;
+                const elapsedSecsSinceLast = Math.floor((nowMs - lastScreenshotTimeRef.current) / 1000);
+
+                if (elapsedSecsSinceLast >= intervalSecs) {
+                    lastScreenshotTimeRef.current = nowMs;
+                    captureAndUploadLiveScreenshot();
+                    setScreenCountdown(intervalSecs);
+                } else {
+                    setScreenCountdown(Math.max(0, intervalSecs - elapsedSecsSinceLast));
+                }
             }
 
             if (currentStatus === "On Break") {
@@ -1222,9 +1252,11 @@ const EmployeeDashboard = () => {
                 setTasks([{ id: "temp-1", text: "", completed: false }]);
 
                 // Immediately capture and upload the first compliance screenshot!
+                lastScreenshotTimeRef.current = Date.now();
                 setTimeout(() => {
+                    lastScreenshotTimeRef.current = Date.now();
                     captureAndUploadLiveScreenshot();
-                }, 1000);
+                }, 1200);
             } catch (err) {
                 console.error("Failed to clock in:", err);
                 alert("Connection failed during clock in.");

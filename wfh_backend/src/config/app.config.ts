@@ -28,9 +28,9 @@ export const appConfig = {
   ),
   breakGraceSeconds: parseInt(process.env.BREAK_GRACE_SECONDS || "15", 10),
 
-  screenshotRetentionDays: parseInt(process.env.SCREENSHOT_RETENTION_DAYS || "7", 10),
+  screenshotRetentionDays: parseInt(process.env.SCREENSHOT_RETENTION_DAYS || "2", 10),
   adminScreenshotWindowHours: parseInt(
-    process.env.ADMIN_SCREENSHOT_WINDOW_HOURS || "24",
+    process.env.ADMIN_SCREENSHOT_WINDOW_HOURS || "48",
     10
   ),
   shiftHistoryLimit: parseInt(process.env.SHIFT_HISTORY_LIMIT || "30", 10),
