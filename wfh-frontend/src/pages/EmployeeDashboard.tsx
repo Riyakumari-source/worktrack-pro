@@ -21,7 +21,8 @@ import {
     FiUploadCloud,
     FiLock,
     FiCompass,
-    FiMapPin
+    FiMapPin,
+    FiMenu
 } from "react-icons/fi";
 import EmployeeSidebar from "@/components/EmployeeSidebar";
 import { getSocket } from "@/utils/socket";
@@ -62,6 +63,7 @@ const formatCountdown = (totalSeconds: number) => {
 
 const EmployeeDashboard = () => {
     const navigate = useNavigate();
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const handleLogout = () => {
         sessionStorage.removeItem("wfh_auth_token");
         sessionStorage.removeItem("wfh_logged_in_user");
@@ -1766,44 +1768,57 @@ const EmployeeDashboard = () => {
             <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-brand-blue opacity-[0.07] rounded-full blur-[120px] -z-10 pointer-events-none"></div>
             <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-brand-peacock opacity-[0.06] rounded-full blur-[120px] -z-10 pointer-events-none"></div>
 
-            {/* Sidebar (IA Connect Text Removed) */}
-            <EmployeeSidebar activeMenu={activeTab} onMenuChange={setActiveTab} />
+            {/* Sidebar - Mobile Responsive */}
+            <EmployeeSidebar 
+                activeMenu={activeTab} 
+                onMenuChange={setActiveTab}
+                mobileOpen={mobileSidebarOpen}
+                onMobileClose={() => setMobileSidebarOpen(false)}
+            />
 
             {/* Content Canvas */}
             <div className="flex-1 flex flex-col min-w-0 max-h-screen overflow-y-auto">
                 
-                {/* Navbar (IA Connect Text Removed) */}
-                <header className="h-20 bg-white border-b border-slate-100 px-8 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
+                {/* Navbar - Mobile Responsive */}
+                <header className="h-16 sm:h-20 bg-white border-b border-slate-100 px-4 sm:px-8 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
                     <div className="flex items-center gap-3">
+                        {/* Mobile hamburger */}
+                        <button 
+                            className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"
+                            onClick={() => setMobileSidebarOpen(true)}
+                            title="Menu"
+                        >
+                            <FiMenu size={18} />
+                        </button>
                         <img 
                             src="/logo.png" 
                             alt="Company Logo" 
-                            className="h-10 w-auto object-contain"
+                            className="h-8 sm:h-10 w-auto object-contain"
                         />
                     </div>
 
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-2 sm:gap-4">
                         {/* Live Status indicator */}
-                        <div className="flex items-center gap-2 bg-slate-50 px-3.5 py-1.5 rounded-full border border-slate-100 shadow-sm">
-                            <span className={`w-2.5 h-2.5 rounded-full ${
+                        <div className="flex items-center gap-2 bg-slate-50 px-2.5 sm:px-3.5 py-1.5 rounded-full border border-slate-100 shadow-sm">
+                            <span className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0 ${
                                 currentStatus === "Active" ? "bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" :
                                 currentStatus === "On Break" ? "bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)]" :
                                 currentStatus === "Idle" ? "bg-yellow-400 animate-pulse shadow-[0_0_8px_rgba(234,179,8,0.6)]" : "bg-slate-300"
                             }`} />
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                            <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                                 {currentStatus === "Active" ? "Working" : currentStatus === "Idle" ? "Idle" : currentStatus}
                             </span>
                         </div>
 
-                        <button className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-brand-blue hover:bg-brand-blue/5 transition-all duration-300 relative">
-                            <FiBell size={18} />
-                            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 rounded-full bg-brand-peacock" />
+                        <button className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-500 hover:text-brand-blue hover:bg-brand-blue/5 transition-all duration-300 relative">
+                            <FiBell size={16} />
+                            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-brand-peacock" />
                         </button>
 
-                        <div className="h-6 w-px bg-slate-200" />
+                        <div className="h-5 sm:h-6 w-px bg-slate-200" />
 
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-sm shadow-md">
+                        <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-brand-blue to-brand-peacock text-white flex items-center justify-center font-bold text-xs sm:text-sm shadow-md shrink-0">
                                 {userInitials}
                             </div>
                             <div className="hidden sm:block">
@@ -1819,16 +1834,16 @@ const EmployeeDashboard = () => {
                                     handleLogout();
                                 }
                             }}
-                            className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-300 cursor-pointer"
+                            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all duration-300 cursor-pointer active:scale-95"
                             title="Log Out"
                         >
-                            <FiLogOut size={18} />
+                            <FiLogOut size={16} />
                         </button>
                     </div>
                 </header>
 
                 {/* Dashboard Main Viewport */}
-                <main className="flex-1 p-8 flex flex-col gap-8 justify-between max-w-7xl mx-auto w-full relative">
+                <main className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col gap-5 sm:gap-8 max-w-7xl mx-auto w-full relative">
                     
                     {/* Screenshot Telemetry Notification Toast */}
                     {screenNotification.show && (
@@ -1864,27 +1879,27 @@ const EmployeeDashboard = () => {
                     {activeTab === "Dashboard" && (
                         <>
                             {/* Header Welcome banner */}
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                                 <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-3 py-1 rounded-full">
+                                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-2.5 sm:px-3 py-1 rounded-full">
                                         WORK SHIFT MONITORING
                                     </span>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mt-3">
+                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight mt-2 sm:mt-3">
                                         Welcome Back, {userName.split(" ")[0]}
                                     </h2>
-                                    <p className="text-sm text-slate-400 mt-1 font-medium">
+                                    <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                         Keep track of your shift hours. All offline times are clocked securely.
                                     </p>
                                 </div>
                                 
-                                <div className="flex items-center gap-4 text-xs font-semibold text-slate-500">
-                                    <div className="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-2xl shadow-sm">
-                                        <FiCalendar className="text-brand-blue" size={16} />
-                                        <span>{currentDate || "Loading Date..."}</span>
+                                <div className="flex items-center gap-2 sm:gap-4 text-xs font-semibold text-slate-500 flex-wrap">
+                                    <div className="flex items-center gap-2 bg-white border border-slate-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-sm">
+                                        <FiCalendar className="text-brand-blue shrink-0" size={14} />
+                                        <span className="text-[10px] sm:text-xs">{currentDate || "Loading..."}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 bg-white border border-slate-100 px-4 py-2.5 rounded-2xl shadow-sm min-w-[120px]">
-                                        <FiClock className="text-brand-peacock" size={16} />
-                                        <span className="tabular-nums">{currentTime || "Loading Time..."}</span>
+                                    <div className="flex items-center gap-2 bg-white border border-slate-100 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl shadow-sm min-w-[100px]">
+                                        <FiClock className="text-brand-peacock shrink-0" size={14} />
+                                        <span className="tabular-nums text-[10px] sm:text-xs">{currentTime || "Loading..."}</span>
                                     </div>
                                 </div>
                             </div>
@@ -2183,16 +2198,16 @@ const EmployeeDashboard = () => {
 
                     {/* Break Tab */}
                     {activeTab === "Break" && (
-                        <div className="space-y-8 animate-fade-in">
+                        <div className="space-y-6 sm:space-y-8 animate-fade-in">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                                 <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-amber-500 bg-amber-500/5 border border-amber-500/10 px-3 py-1 rounded-full">
+                                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-amber-500 bg-amber-500/5 border border-amber-500/10 px-2.5 sm:px-3 py-1 rounded-full">
                                         Shift Break Management
                                     </span>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mt-3">
+                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight mt-2 sm:mt-3">
                                         Your Break Allowance
                                     </h2>
-                                    <p className="text-sm text-slate-400 mt-1 font-medium">
+                                    <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                         Clock breaks to pause your working shift timer. Overstaying breaks triggers Auto-Logout.
                                     </p>
                                 </div>
@@ -2377,13 +2392,13 @@ const EmployeeDashboard = () => {
                         <div className="space-y-8 animate-fade-in">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                                 <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-3 py-1 rounded-full">
+                                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-2.5 sm:px-3 py-1 rounded-full">
                                         Shift Operations Planning
                                     </span>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mt-3">
+                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight mt-2 sm:mt-3">
                                         Daily Task Planner
                                     </h2>
-                                    <p className="text-sm text-slate-400 mt-1 font-medium">
+                                    <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                         Assign your work plans before the 59-minute timer expires, and check items to lock logs.
                                     </p>
                                 </div>
@@ -2578,16 +2593,16 @@ const EmployeeDashboard = () => {
 
                     {/* Screen Telemetry Tab */}
                     {activeTab === "Screen Telemetry" && (
-                        <div className="space-y-8 animate-fade-in">
+                        <div className="space-y-6 sm:space-y-8 animate-fade-in">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                                 <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-3 py-1 rounded-full">
+                                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-2.5 sm:px-3 py-1 rounded-full">
                                         Compliance Telemetry
                                     </span>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mt-3">
+                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight mt-2 sm:mt-3">
                                         Background Screen Capture
                                     </h2>
-                                    <p className="text-sm text-slate-400 mt-1 font-medium">
+                                    <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                         Automatic screenshots are captured every 30 minutes, even when minimized, and uploaded directly to Admin audits.
                                     </p>
                                 </div>
@@ -2709,16 +2724,16 @@ const EmployeeDashboard = () => {
                     )}
 
                     {activeTab === "Attendance Logs" && (
-                        <div className="space-y-8 animate-fade-in">
+                        <div className="space-y-6 sm:space-y-8 animate-fade-in">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                                 <div>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-3 py-1 rounded-full">
+                                    <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-brand-blue bg-brand-blue/5 border border-brand-blue/10 px-2.5 sm:px-3 py-1 rounded-full">
                                         Personal Records
                                     </span>
-                                    <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mt-3">
+                                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight mt-2 sm:mt-3">
                                         My Attendance History
                                     </h2>
-                                    <p className="text-sm text-slate-400 mt-1 font-medium">
+                                    <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                         Chronological log of your clocked shifts, resolved physical locations, and task completions.
                                     </p>
                                 </div>
@@ -2807,13 +2822,13 @@ const EmployeeDashboard = () => {
                     {activeTab === "Profile" && (
                         <div className="space-y-6 animate-fade-in">
                             <div className="border-b border-slate-100 pb-5">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-peacock bg-brand-peacock/5 border border-brand-peacock/10 px-3 py-1 rounded-full">
+                                <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest text-brand-peacock bg-brand-peacock/5 border border-brand-peacock/10 px-2.5 sm:px-3 py-1 rounded-full">
                                     Employee Profile Details
                                 </span>
-                                <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight mt-3">
+                                <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight mt-2 sm:mt-3">
                                     {userName}
                                 </h2>
-                                <p className="text-sm text-slate-400 mt-1 font-medium">
+                                <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                                     Review your remote employee credentials, scheduled hours, and connection status.
                                 </p>
                             </div>
