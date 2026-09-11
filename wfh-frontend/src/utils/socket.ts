@@ -5,15 +5,14 @@ let socket: Socket | null = null;
 
 /**
  * Returns a singleton Socket.io client instance.
- * The JWT auth token is read from sessionStorage (key 'wfh_auth_token').
- * The client connects to the backend server defined by API_BASE_URL.
+ * Connects to /live namespace with websocket and polling transports for reliability.
  */
 export const getSocket = (): Socket => {
   if (!socket) {
     const token = sessionStorage.getItem('wfh_auth_token') || '';
-    socket = io(`${API_BASE_URL}`, {
+    socket = io(`${API_BASE_URL}/live`, {
       auth: { token },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
     });
   }
   return socket;
